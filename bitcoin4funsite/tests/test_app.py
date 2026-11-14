@@ -347,7 +347,7 @@ class ApplicationContract(unittest.TestCase):
         response = app.test_client().get('/api/market')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['status'], 'stale')
-        self.assertEqual(response.json['rates']['btc_toman'], '21105000000')
+        self.assertEqual(response.json['rates']['btc_toman'], '21210000000')
         self.assertIn('raw_rates', response.json)
         self.assertEqual(response.json['raw_rates'], {'btc_toman': '21000000000', 'usdt_toman': '270000'})
         self.assertEqual(response.json['rows'][0]['principal_sats'], 501)

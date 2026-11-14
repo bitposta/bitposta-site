@@ -6,6 +6,20 @@ from decimal import Context, Decimal, InvalidOperation, ROUND_CEILING, localcont
 SATOSHIS_PER_BTC = 100_000_000
 MAX_SATOSHIS = 21_000_000 * SATOSHIS_PER_BTC
 
+# Buying bitcoin costs more than the quoted market price. Two separate 0.5%
+# exchange fees are paid on the same purchase (buying the coin, then converting
+# it to bitcoin), so the bitcoin rate carries a 1% markup. The markup is applied
+# ONCE, to the rate; the principal is never charged a second percentage fee.
+EXCHANGE_FEE = Decimal("0.01")
+# The exchange charges a flat two-cent fee to convert the coin into bitcoin. The
+# owner chose this fixed dollar amount instead of tracking a BNB price, so it is
+# a USD cost like the materials and the postage.
+CONVERT_USD = Decimal("0.02")
+# The exchange pays a fixed bitcoin network fee when it deposits into the
+# operator's wallet: 0.00000423 BTC = 423 satoshis. It is already satoshis, so
+# no exchange rate is applied to it.
+TRANSFER_SATS = 423
+
 
 def btc_to_sats(text: str) -> int:
     """Convert unsigned ASCII BTC text (at most eight decimals), without rounding.
@@ -52,16 +66,22 @@ def _ceil(value: Decimal) -> int:
 
 def _quote_row(principal: int, network: int, materials: int, post: int,
                satoshi_toman: Decimal, budget: int | None = None, tag: int = 0,
-               envelope: int = 0) -> dict:
-    operator = _ceil(Decimal("0.15") * (principal + network + materials + envelope + post + tag))
-    total_sats = principal + network + materials + envelope + post + tag + operator
+               envelope: int = 0, convert: int = 0, transfer: int = 0) -> dict:
+    # The 1% exchange markup already lives in satoshi_toman, so the principal is
+    # charged exactly once. convert and transfer are the two fixed acquisition
+    # costs and are part of the operator's 15% subtotal like every other cost.
+    operator = _ceil(Decimal("0.15") * (principal + network + convert + transfer
+                                        + materials + envelope + post + tag))
+    total_sats = (principal + network + convert + transfer
+                  + materials + envelope + post + tag + operator)
     total_toman = _ceil(total_sats * satoshi_toman)
     # The operator's income in toman: the same 15% fee, converted at the same rate and
     # rounded up once. Never recomputed from total_toman, which would double the ceiling.
     operator_toman = _ceil(operator * satoshi_toman)
     return {
         "principal_sats": principal, "btc": sats_to_btc(principal),
-        "network_sats": network, "materials_sats": materials,
+        "network_sats": network, "convert_sats": convert, "transfer_sats": transfer,
+        "materials_sats": materials,
         "envelope_sats": envelope, "post_sats": post,
         "tag_sats": tag,
         "operator_sats": operator, "operator_toman": operator_toman, "total_sats": total_sats,
@@ -102,14 +122,18 @@ def _pricing_inputs(btc_toman, usdt_toman, fee_rate, include_tag=False, in_perso
     raw_usdt = _rate(usdt_toman, Decimal("1e15"), "usdt_toman")
     rate = _rate(fee_rate, Decimal("10000"), "fee_rate")
     with localcontext(Context(prec=128)):
-        adjusted_btc = raw_btc * Decimal("1.005")
-        adjusted_usdt = raw_usdt * Decimal("1.005")
+        adjusted_btc = raw_btc * (1 + EXCHANGE_FEE)
+        adjusted_usdt = raw_usdt
         satoshi_toman = adjusted_btc / SATOSHIS_PER_BTC
         network_sats = _ceil(rate * 141)
+        # The exchange's own bitcoin transfer fee is fixed in bitcoin, so it is
+        # already satoshis and never converted through a rate.
+        transfer_sats = TRANSFER_SATS
         # Materials are always spent on the card itself: $0.03 wax seal + $0.01 paper
         # + $0.01 print = $0.05. Postal delivery adds two separate charges: the
         # $0.06 envelope and the $0.75 postage. Hand delivery drops only those two.
         materials_sats = _ceil(Decimal("0.05") * adjusted_usdt / satoshi_toman)
+        convert_sats = _ceil(CONVERT_USD * adjusted_usdt / satoshi_toman)
         envelope_sats = 0 if in_person else _ceil(Decimal("0.06") * adjusted_usdt / satoshi_toman)
         post_sats = 0 if in_person else _ceil(Decimal("0.75") * adjusted_usdt / satoshi_toman)
         tag_sats = _ceil(Decimal("0.12") * adjusted_usdt / satoshi_toman) if include_tag else 0
@@ -120,18 +144,23 @@ def _pricing_inputs(btc_toman, usdt_toman, fee_rate, include_tag=False, in_perso
                 "satoshi_toman": _decimal_text(satoshi_toman),
             },
             "assumptions": {
-                "exchange_fee_percent": "0.5", "operator_fee_percent": "15",
+                "exchange_fee_percent": "1", "operator_fee_percent": "15",
                 "materials_usd": "0.05", "envelope_usd": "0.06", "post_usd": "0.75",
                 "tag_usd": "0.12", "include_tag": include_tag,
                 "in_person": in_person,
                 "transaction_vbytes": 141,
                 "network_fee_rate": _decimal_text(rate),
                 "seal_usd": "0.03", "paper_usd": "0.01", "print_usd": "0.01",
+                "convert_usd": _decimal_text(CONVERT_USD),
+                "transfer_sats": TRANSFER_SATS,
             },
-            "costs": {"network_sats": network_sats, "materials_sats": materials_sats,
+            "costs": {"network_sats": network_sats, "convert_sats": convert_sats,
+                      "transfer_sats": transfer_sats,
+                      "materials_sats": materials_sats,
                       "envelope_sats": envelope_sats, "post_sats": post_sats, "tag_sats": tag_sats},
         }
-    return satoshi_toman, network_sats, materials_sats, envelope_sats, post_sats, tag_sats, metadata
+    return (satoshi_toman, network_sats, convert_sats, transfer_sats, materials_sats,
+            envelope_sats, post_sats, tag_sats, metadata)
 
 
 def _unsigned_integer(value, name: str, minimum: int, maximum: int) -> int:
@@ -150,7 +179,7 @@ def _unsigned_integer(value, name: str, minimum: int, maximum: int) -> int:
 def raw_asset_toman(raw_btc, principal_sats) -> str:
     """Exact raw BTC asset value in toman as decimal text, without any fees.
 
-    The rate follows quote_table validation, before its 0.5% exchange markup.
+    The rate follows quote_table validation, before its 1% exchange markup.
     Principal is an int or <=64 ASCII digits in [0, MAX_SATOSHIS]; zero and
     sub-package amounts are valid. No currency rounding is applied.
     """
@@ -170,10 +199,11 @@ def quote_for_principal(btc_toman, usdt_toman, fee_rate, principal_sats, *, incl
     collects the card by hand.
     """
     principal = _unsigned_integer(principal_sats, "principal_sats", 501, MAX_SATOSHIS)
-    satoshi_toman, network, materials, envelope, post, tag, metadata = _pricing_inputs(
-        btc_toman, usdt_toman, fee_rate, include_tag, in_person)
+    (satoshi_toman, network, convert, transfer, materials, envelope, post, tag,
+     metadata) = _pricing_inputs(btc_toman, usdt_toman, fee_rate, include_tag, in_person)
     with localcontext(Context(prec=128)):
-        row = _quote_row(principal, network, materials, post, satoshi_toman, tag=tag, envelope=envelope)
+        row = _quote_row(principal, network, materials, post, satoshi_toman, tag=tag,
+                         envelope=envelope, convert=convert, transfer=transfer)
     return {**row, **metadata}
 
 
@@ -187,10 +217,11 @@ def quote_for_budget(btc_toman, usdt_toman, fee_rate, budget_toman, *, include_t
     in_person drops the envelope materials and the postage.
     """
     budget = _unsigned_integer(budget_toman, "budget_toman", 0, 10**64 - 1)
-    satoshi_toman, network, materials, envelope, post, tag, metadata = _pricing_inputs(
-        btc_toman, usdt_toman, fee_rate, include_tag, in_person)
+    (satoshi_toman, network, convert, transfer, materials, envelope, post, tag,
+     metadata) = _pricing_inputs(btc_toman, usdt_toman, fee_rate, include_tag, in_person)
     with localcontext(Context(prec=128)):
-        minimum = _quote_row(501, network, materials, post, satoshi_toman, tag=tag, envelope=envelope)
+        minimum = _quote_row(501, network, materials, post, satoshi_toman, tag=tag,
+                             envelope=envelope, convert=convert, transfer=transfer)
         if minimum["total_toman"] > budget:
             raise ValueError(
                 f"budget_toman insufficient for minimum 501-satoshi package; "
@@ -199,12 +230,14 @@ def quote_for_budget(btc_toman, usdt_toman, fee_rate, budget_toman, *, include_t
         low, high = 501, MAX_SATOSHIS
         while low < high:
             middle = (low + high + 1) // 2
-            candidate = _quote_row(middle, network, materials, post, satoshi_toman, tag=tag, envelope=envelope)
+            candidate = _quote_row(middle, network, materials, post, satoshi_toman, tag=tag,
+                                   envelope=envelope, convert=convert, transfer=transfer)
             if candidate["total_toman"] <= budget:
                 low = middle
             else:
                 high = middle - 1
-        row = _quote_row(low, network, materials, post, satoshi_toman, budget, tag=tag, envelope=envelope)
+        row = _quote_row(low, network, materials, post, satoshi_toman, budget, tag=tag,
+                         envelope=envelope, convert=convert, transfer=transfer)
     return {**row, **metadata}
 
 
@@ -219,18 +252,27 @@ def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person
     envelope materials and postage, and is included in the operator subtotal,
     not the envelope principal.
 
-    Both raw prices are multiplied by 1.005 before costing. Every following
-    ceiling is explicit (no intermediate currency rounding):
+    Both raw prices are used as received. The bitcoin rate carries a 1% markup
+    because two separate 0.5% exchange fees are paid on the same purchase:
+    buying the coin, then converting it to bitcoin. The markup is applied ONCE,
+    to the rate; the principal is never charged a second percentage fee. The
+    tether rate is NOT marked up, because the dollar costs are already divided
+    by the marked-up satoshi price, so a markup on both sides would cancel out.
+    Every following ceiling is explicit (no intermediate currency rounding):
       network_sats = ceil(fee_rate * 141)
-      materials_sats = ceil(0.05 * adjusted_usdt / adjusted_satoshi_toman)
-      envelope_sats = 0 if in_person else ceil(0.06 * adjusted_usdt / adjusted_satoshi_toman)
-      post_sats = 0 if in_person else ceil(0.75 * adjusted_usdt / adjusted_satoshi_toman)
-      tag_sats = ceil(0.12 * adjusted_usdt / adjusted_satoshi_toman) if include_tag else 0
-      operator_sats = ceil(0.15 * (principal + network_sats + materials_sats
+      convert_sats = ceil(0.02 * usdt_toman / satoshi_toman)
+      transfer_sats = 423
+      materials_sats = ceil(0.05 * usdt_toman / satoshi_toman)
+      envelope_sats = 0 if in_person else ceil(0.06 * usdt_toman / satoshi_toman)
+      post_sats = 0 if in_person else ceil(0.75 * usdt_toman / satoshi_toman)
+      tag_sats = ceil(0.12 * usdt_toman / satoshi_toman) if include_tag else 0
+      operator_sats = ceil(0.15 * (principal + network_sats + convert_sats
+                                   + transfer_sats + materials_sats
                                    + envelope_sats + post_sats + tag_sats))
-      operator_toman = ceil(operator_sats * adjusted_satoshi_toman)
-      total_toman = ceil((principal + network_sats + materials_sats + envelope_sats
-                          + post_sats + tag_sats + operator_sats) * adjusted_satoshi_toman)
+      operator_toman = ceil(operator_sats * satoshi_toman)
+      total_toman = ceil((principal + network_sats + convert_sats + transfer_sats
+                          + materials_sats + envelope_sats + post_sats
+                          + tag_sats + operator_sats) * satoshi_toman)
       total_rial = total_toman * 10
     operator_toman is the operator's income for that row: the same 15% fee
     converted to toman and rounded up once. It is derived from operator_sats,
@@ -239,7 +281,14 @@ def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person
     and it is always spent on the card itself. Postal delivery adds two separate
     charges: a 0.06 USD envelope and 0.75 USD postage. in_person=True drops only
     those two, because the buyer collects the card by hand; materials, the tag
-    charge and the network fee are unaffected.
+    charge, the two acquisition costs and the network fee are unaffected.
+    The two acquisition costs are separate from the delivery fee. convert_sats is
+    the flat two-cent exchange fee for turning the coin into bitcoin, and
+    transfer_sats is the 0.00000423 BTC (423 satoshis) the exchange pays to
+    deposit bitcoin into the operator's account. Both are paid before the card is
+    funded, so neither depends on the selected speed.
+    network_sats is the separate delivery transaction from the operator's own
+    wallet to the paper wallet, and it is the only cost the speed selector moves.
     The 141 vB estimate assumes one P2WPKH input and two P2WPKH outputs.
     A first 501-satoshi quote is always shown, even above 3,000,000 toman.
     Budget rows begin at the next strictly greater 100,000-toman multiple;
@@ -247,22 +296,24 @@ def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person
     ceiling. Remainder is budget minus actual rounded cost (zero without a
     budget); it is never hidden by pretending the whole budget was spent.
     """
-    satoshi_toman, network_sats, materials_sats, envelope_sats, post_sats, tag, metadata = _pricing_inputs(
+    satoshi_toman, network_sats, convert_sats, transfer_sats, materials_sats, envelope_sats, post_sats, tag, metadata = _pricing_inputs(
         btc_toman, usdt_toman, fee_rate, include_tag, in_person)
     with localcontext(Context(prec=128)):
-        first = _quote_row(501, network_sats, materials_sats, post_sats, satoshi_toman, tag=tag, envelope=envelope_sats)
+        def build(principal, budget=None):
+            return _quote_row(principal, network_sats, materials_sats, post_sats, satoshi_toman,
+                              budget, tag=tag, envelope=envelope_sats,
+                              convert=convert_sats, transfer=transfer_sats)
+
+        first = build(501)
         rows = [first]
         first_budget = (first["total_toman"] // 100_000 + 1) * 100_000
         for budget in range(first_budget, 3_000_001, 100_000):
             low, high = 501, MAX_SATOSHIS
             while low < high:
                 middle = (low + high + 1) // 2
-                candidate = _quote_row(middle, network_sats, materials_sats, post_sats,
-                                       satoshi_toman, tag=tag, envelope=envelope_sats)
-                if candidate["total_toman"] <= budget:
+                if build(middle)["total_toman"] <= budget:
                     low = middle
                 else:
                     high = middle - 1
-            rows.append(_quote_row(low, network_sats, materials_sats, post_sats,
-                                   satoshi_toman, budget, tag=tag, envelope=envelope_sats))
+            rows.append(build(low, budget))
         return {**metadata, "rows": rows}
