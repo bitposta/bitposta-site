@@ -19,7 +19,7 @@ assert _http_spec is not None and _http_spec.loader is not None
 _bounded_http = importlib.util.module_from_spec(_http_spec)
 _http_spec.loader.exec_module(_bounded_http)
 
-PRICE_URL = 'https://swapwallet.app/api/v1/market/prices'
+PRICE_URL = 'https://portal.swapwallet.app/api/v1/market/prices'
 FEE_URL = 'https://mempool.space/api/v1/fees/recommended'
 MAX_RESPONSE_BYTES = 262144
 

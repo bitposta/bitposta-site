@@ -315,7 +315,7 @@ class ApplicationContract(unittest.TestCase):
             'status': 'fresh', 'fetched_at': '2026-10-29T20:00:00+00:00',
             'raw_prices': {'btc_toman': '21000000000', 'usdt_toman': '270000'},
             'fee_rate': '1.1', 'fee_rates': {'economy': '1.1', 'medium': '2.125', 'fast': '3.25'},
-            'source': {'prices': 'https://swapwallet.app/api/v1/market/prices', 'fees': 'https://mempool.space/api/v1/fees/recommended'},
+            'source': {'prices': 'https://portal.swapwallet.app/api/v1/market/prices', 'fees': 'https://mempool.space/api/v1/fees/recommended'},
         }
         client = self.module.create_app({'TESTING': True, 'MARKET_SERVICE': service}).test_client()
         response = client.get('/api/market')
@@ -340,7 +340,7 @@ class ApplicationContract(unittest.TestCase):
         service.snapshot.return_value = {
             'status': 'stale', 'fetched_at': '2026-10-29T20:00:00+00:00',
             'raw_prices': {'btc_toman': '21000000000', 'usdt_toman': '270000'},
-            'fee_rate': '1', 'source': {'prices': 'https://swapwallet.app/api/v1/market/prices', 'fees': 'https://mempool.space/api/v1/fees/recommended'},
+            'fee_rate': '1', 'source': {'prices': 'https://portal.swapwallet.app/api/v1/market/prices', 'fees': 'https://mempool.space/api/v1/fees/recommended'},
             'private_unused': 'SYNTHETIC_PRIVATE_TOKEN',
         }
         app = self.module.create_app({'TESTING': True, 'MARKET_SERVICE': service})

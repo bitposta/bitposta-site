@@ -39,7 +39,7 @@
       typeof market.fetched_at === "string" &&
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(market.fetched_at) &&
       Number.isFinite(Date.parse(market.fetched_at)) &&
-      market.source?.prices === "https://swapwallet.app/api/v1/market/prices" &&
+      market.source?.prices === "https://portal.swapwallet.app/api/v1/market/prices" &&
       market.source?.fees === "https://mempool.space/api/v1/fees/recommended";
   }
   // Decimal rates have power-of-ten denominators: retain every fractional digit.

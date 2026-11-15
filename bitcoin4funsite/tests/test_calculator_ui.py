@@ -236,7 +236,7 @@ assert.equal(requests.length,1);
         self.assertIn('id="quote-rows"', source)
         self.assertIn("<noscript>", source)
         self.assertIn("/static/calculator.js", source)
-        self.assertIn("https://swapwallet.app/api/v1/market/prices", source)
+        self.assertIn("https://portal.swapwallet.app/api/v1/market/prices", source)
         self.assertIn("https://mempool.space/api/v1/fees/recommended", source)
         home = self.render("index.html")
         self.assertIn('href="/costs"', home)
@@ -957,7 +957,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const all=root=>{const found=[];const walk=node=>{found.push(node);node.children.forEach(walk);};walk(root);return found;};
 const edit=async(id,value)=>{ids[id].value=value; await ids[id].emit('input');};
 const marketFixture=()=>({status:'fresh',fetched_at:'2026-10-30T10:00:00+00:00',
-  source:{prices:'https://swapwallet.app/api/v1/market/prices',fees:'https://mempool.space/api/v1/fees/recommended'},
+  source:{prices:'https://portal.swapwallet.app/api/v1/market/prices',fees:'https://mempool.space/api/v1/fees/recommended'},
   raw_rates:{btc_toman:'9950248756.21890547263681592039800995',usdt_toman:'99502.4875621890547263681592039800995'},
   rates:{btc_toman:'10000000000',usdt_toman:'100000',satoshi_toman:'100'},
   assumptions:{exchange_fee_percent:'1',operator_fee_percent:'15',materials_usd:'0.05',envelope_usd:'0.06',post_usd:'0.75',tag_usd:'0.12',seal_usd:'0.03',paper_usd:'0.01',print_usd:'0.01',convert_usd:'0.02',transfer_sats:423,transaction_vbytes:141,network_fee_rate:'1'},

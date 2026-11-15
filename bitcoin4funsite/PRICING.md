@@ -154,7 +154,7 @@
 
 منبع قیمت با احراز هویت و دو کلید عمومی نرخ:
 
-https://swapwallet.app/api/v1/market/prices
+https://portal.swapwallet.app/api/v1/market/prices
 
     BTC/IRT
     USDT/IRT
