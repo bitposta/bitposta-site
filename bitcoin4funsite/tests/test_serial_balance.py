@@ -89,7 +89,7 @@ class SerialBalance(unittest.TestCase):
         for base in ('/api/wallets/' + SERIAL, '/s/' + SERIAL, '/' + SERIAL,
                      '/lookup?serial=' + SERIAL):
             for query in ('balance=0', 'balance=', 'balance=true', 'balance=1&balance=1',
-                          'balance=1&address=' + ADDRESS, 'unknown=1', 'balance=1&after_txid=x'):
+                          'unknown=1', 'balance=1&after_txid=x'):
                 client, lookup, limiter, http = self.fixture()
                 response = client.get(base + ('&' if '?' in base else '?') + query)
                 with self.subTest(base=base, query=query):
@@ -97,9 +97,21 @@ class SerialBalance(unittest.TestCase):
                     lookup.assert_not_called()
                     limiter.admit.assert_not_called()
                     self.assertEqual(http.calls, [])
+        # The lookup page alone accepts one public address as a second input;
+        # the serial aliases and the JSON API still reject it.
+        for base in ('/api/wallets/' + SERIAL, '/s/' + SERIAL, '/' + SERIAL):
+            client, lookup, limiter, http = self.fixture()
+            response = client.get(base + ('&' if '?' in base else '?') + 'address=' + ADDRESS)
+            with self.subTest(base=base, query='address'):
+                self.assertEqual(response.status_code, 400)
+                lookup.assert_not_called()
+                limiter.admit.assert_not_called()
+                self.assertEqual(http.calls, [])
         client, lookup, limiter, http = self.fixture()
         for path in ('/lookup?serial=' + SERIAL + '&serial=' + SERIAL + '&balance=1',
-                     '/lookup?balance=1', '/api/wallets/' + SERIAL + '/qr.svg?balance=1'):
+                     '/lookup?balance=1', '/api/wallets/' + SERIAL + '/qr.svg?balance=1',
+                     '/lookup?address=' + ADDRESS + '&address=' + ADDRESS,
+                     '/lookup?address=' + ADDRESS + '&unknown=1'):
             self.assertEqual(client.get(path).status_code, 400)
         lookup.assert_not_called()
         limiter.admit.assert_not_called()

@@ -1,20 +1,28 @@
 {% extends "base.html" %}
 {% set page = 'lookup' %}
-{% block title %}استعلام آدرس عمومی با سریال | بیت‌کوین برای سرگرمی{% endblock %}
+{% block title %}استعلام سریال یا آدرس عمومی | بیت‌کوین برای سرگرمی{% endblock %}
 {% block content %}
 {% set wait_seconds = lookup_retry_after|default('', true)|string %}
 {% set wait_fa = wait_seconds|replace('0', '۰')|replace('1', '۱')|replace('2', '۲')|replace('3', '۳')|replace('4', '۴')|replace('5', '۵')|replace('6', '۶')|replace('7', '۷')|replace('8', '۸')|replace('9', '۹') %}
 {% set limit_message = 'برای هر اتصال اینترنتی، پنج استعلام در شصت ثانیه مجاز است؛ ' + ('پس از ' + wait_fa + ' ثانیه دوباره تلاش کنید.' if wait_seconds else 'کمی صبر کنید و دوباره بزنید.') %}
-<header class="page-heading shell"><a class="breadcrumb" href="/">خانه <span aria-hidden="true">/</span> استعلام سریال</a><p class="eyebrow">فقط بخش عمومی پاکت</p><h1>یک سریال.<br>یک آدرس عمومی.</h1><p class="page-deck">شمارهٔ سریال روی پاکت را بنویسید تا آدرس دریافت بیت‌کوین را ببینید. لازم نیست پاکت را باز کنید. کلمات بازیابی را اینجا ننویسید.</p></header>
+{% set queried_address = address|default('', true) %}
+<header class="page-heading shell"><a class="breadcrumb" href="/">خانه <span aria-hidden="true">/</span> استعلام</a><p class="eyebrow">فقط بخش عمومی پاکت</p><h1>یک سریال.<br>یک آدرس عمومی.</h1><p class="page-deck">شمارهٔ سریال روی پاکت را بنویسید تا آدرس دریافت بیت‌کوین را ببینید. اگر فقط آدرس عمومی را دارید، همان را در کادر دوم بنویسید. لازم نیست پاکت را باز کنید. کلمات بازیابی را اینجا ننویسید.</p></header>
 <section class="lookup-layout shell" aria-label="استعلام عمومی پاکت">
   <div class="lookup-main">
-    <form id="lookup-form" action="/lookup" method="get" data-initial-serial="{{ serial|default('', true) }}" data-initial-state="{{ 'found' if wallet else lookup_error|default('', true) }}" data-initial-address="{{ wallet.address if wallet else '' }}" data-initial-explorer="{{ 'https://mempool.space/address/' + wallet.address if wallet else '' }}" data-retry-after="{{ lookup_retry_after|default('', true) }}" data-initial-balance='{{ (wallet.balance if wallet and wallet.balance else none)|tojson }}' data-initial-public='{{ (wallet.public if wallet and wallet.public else none)|tojson }}' data-balance-error="{{ wallet.balance_error if wallet and wallet.balance_error else '' }}">
-      <label for="serial">شمارهٔ سریال پاکت</label>
-      <p id="serial-hint" class="field-hint">فقط شمارهٔ سریال؛ با حروف و ارقام انگلیسی، خط تیره یا زیرخط. فاصله وارد نکنید.</p>
+    <form id="lookup-form" action="/lookup" method="get" data-initial-serial="{{ wallet.serial if wallet else serial|default('', true) }}" data-initial-state="{{ 'found' if wallet else lookup_error|default('', true) }}" data-initial-address="{{ wallet.address if wallet else '' }}" data-initial-explorer="{{ 'https://mempool.space/address/' + wallet.address if wallet else '' }}" data-retry-after="{{ lookup_retry_after|default('', true) }}" data-initial-balance='{{ (wallet.balance if wallet and wallet.balance else none)|tojson }}' data-initial-public='{{ (wallet.public if wallet and wallet.public else none)|tojson }}' data-balance-error="{{ wallet.balance_error if wallet and wallet.balance_error else '' }}">
+      <div class="lookup-field">
+        <label for="serial">۱. شمارهٔ سریال پاکت</label>
+        <p id="serial-hint" class="field-hint">فقط شمارهٔ سریال؛ با حروف و ارقام انگلیسی، خط تیره یا زیرخط. فاصله وارد نکنید.</p>
+        <input id="serial" name="serial" type="text" value="{{ serial|default('', true) }}" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64" pattern="{{ serial_pattern }}" aria-describedby="serial-hint">
+      </div>
+      <div class="lookup-field">
+        <label for="address">۲. آدرس عمومی (شمارهٔ حساب)</label>
+        <p id="address-hint" class="field-hint">آدرسی که با bc1q شروع می‌شود و ۴۲ نویسه دارد. اگر آدرس در فهرست ما نباشد، سه پیوند کاوشگر برای همان آدرس می‌بینید.</p>
+        <input id="address" name="address" type="text" value="{{ queried_address }}" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="42" pattern="bc1q[02-9ac-hj-np-z]{38}" aria-describedby="address-hint">
+      </div>
       <p class="field-hint">برای هر اتصال اینترنتی، پنج استعلام در شصت ثانیه مجاز است. اگر چند نفر از یک اتصال استفاده کنند، این سهمیه بین آن‌ها مشترک است. دیدن کد تصویری نتیجه تا شصت ثانیه پس از استعلام، از این سهمیه کم نمی‌کند.</p>
-      <div class="lookup-controls"><input id="serial" name="serial" type="text" value="{{ serial|default('', true) }}" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64" pattern="{{ serial_pattern }}" aria-describedby="serial-hint" required><button id="lookup-submit" class="button" type="submit">نمایش آدرس <span aria-hidden="true">←</span></button></div>
       <p id="balance-privacy" class="field-hint">فقط با زدن «نمایش موجودی»، سرور آدرس عمومی را به بلاک‌استریم می‌فرستد. آن سرویس آدرس عمومی و اتصال سرور را می‌بیند؛ نه شمارهٔ سریال یا نشانی اینترنتی شما. هر بار یک استعلام از سهمیه کم می‌شود. دریافت و تکرار خودکار نداریم.</p>
-      <button id="balance-submit" class="secondary-button" type="submit" name="balance" value="1" aria-describedby="balance-privacy">نمایش موجودی</button>
+      <div class="lookup-controls"><button id="lookup-submit" class="button" type="submit">استعلام <span aria-hidden="true">←</span></button><button id="balance-submit" class="secondary-button" type="submit" name="balance" value="1" aria-describedby="balance-privacy">نمایش موجودی</button></div>
     </form>
     <p id="lookup-status" class="lookup-status" role="status" aria-live="polite" aria-atomic="true">{% if lookup_error == 'rate_limited' %}{{ limit_message }}{% elif lookup_error == 'unavailable' %}سرویس استعلام فعلاً در دسترس نیست.{% endif %}</p>
     <div id="lookup-result" class="lookup-result" hidden></div>
@@ -22,20 +30,15 @@
       {% if wallet %}
       <section class="lookup-result" aria-label="آدرس عمومی پیدا شد">
         <h2>آدرس عمومی این پاکت</h2>
-        <p class="result-label">شمارهٔ سریال</p>
-        <p class="public-serial ltr-block" dir="ltr">{{ wallet.serial }}</p>
-        <p class="result-label">آدرس دریافت در شبکهٔ اصلی بیت‌کوین</p>
-        <p class="public-address ltr-block" dir="ltr">{{ wallet.address }}</p>
-        <figure class="qr-block"><img src="/api/wallets/{{ wallet.serial }}/qr.svg" alt="کد تصویری آدرس عمومی برای دریافت بیت‌کوین" width="192" height="192"><figcaption>فقط برای دریافت؛ کلمات بازیابی در این تصویر نیست.</figcaption></figure>
         {% if wallet.balance %}
-        <section aria-label="موجودی آدرس عمومی">
+        <section class="balance-panel" aria-label="موجودی آدرس عمومی">
           <h2>موجودی آدرس عمومی</h2>
           {% for label, amount, signed in [('موجودی تأییدشده', wallet.balance.confirmed_sats, false), ('تغییر خالص در انتظار', wallet.balance.pending_delta_sats, true)] %}
           {% set magnitude = amount|abs %}
           {% set sign = '-' if amount < 0 else '+' if signed and amount > 0 else '' %}
           <h3>{{ label }}</h3>
-          <p>ساتوشی</p><p class="ltr-block" dir="ltr">{{ sign }}{{ magnitude }}</p>
-          <p>بیت‌کوین</p><p class="ltr-block" dir="ltr">{{ sign }}{{ magnitude // 100000000 }}.{{ '%08d'|format(magnitude % 100000000) }}</p>
+          <p>ساتوشی</p><p class="balance-value ltr-block" dir="ltr">{{ sign }}{{ magnitude }}</p>
+          <p>بیت‌کوین</p><p class="balance-value ltr-block" dir="ltr">{{ sign }}{{ magnitude // 100000000 }}.{{ '%08d'|format(magnitude % 100000000) }}</p>
           {% endfor %}
           <p>منبع</p><p class="ltr-block" dir="ltr">{{ wallet.balance.source }}</p>
           <p>زمان شروع دریافت به وقت جهانی؛ زمان ثبت در شبکه نیست.</p><p class="ltr-block" dir="ltr">{{ wallet.balance.fetched_at }}</p>
@@ -44,6 +47,11 @@
         {% elif wallet.balance_error %}
         <p role="status">موجودی فعلاً در دسترس نیست؛ این خطا به معنی صفر نیست. آدرس و کد تصویری همچنان قابل استفاده‌اند.</p>
         {% endif %}
+        <p class="result-label">آدرس دریافت در شبکهٔ اصلی بیت‌کوین</p>
+        <p class="public-address ltr-block" dir="ltr">{{ wallet.address }}</p>
+        <p class="result-label">شمارهٔ سریال</p>
+        <p class="public-serial ltr-block" dir="ltr">{{ wallet.serial }}</p>
+        <figure class="qr-block"><img src="/api/wallets/{{ wallet.serial }}/qr.svg" alt="کد تصویری آدرس عمومی برای دریافت بیت‌کوین" width="192" height="192"><figcaption>فقط برای دریافت؛ کلمات بازیابی در این تصویر نیست.</figcaption></figure>
         {% if wallet.public %}
         <section aria-label="اطلاعات اختیاری پاکت">
           {% if wallet.public.notes %}
@@ -77,14 +85,27 @@
         </div>
         <p>نمایش آدرس، تضمین موجودی یا تأیید تراکنش نیست. پیوند خارجی فقط با انتخاب شما باز می‌شود.</p>
       </section>
+      {% elif lookup_error == 'address_not_found' %}
+      <section class="lookup-result" aria-label="آدرس عمومی در فهرست ما نیست">
+        <h2>این آدرس در فهرست ما ثبت نشده است</h2>
+        <p>این آدرس عمومی در فهرست پاکت‌های ما نیست. اگر پاکت را از ما نخریده‌اید یا آدرس را خودتان ساخته‌اید، این طبیعی است. موجودی را برای این آدرس از سرویس بیرونی نمی‌گیریم.</p>
+        <p class="result-label">آدرس عمومی</p>
+        <p class="public-address ltr-block" dir="ltr">{{ queried_address }}</p>
+        <div class="explorer-links">
+          <a class="explorer-link" href="https://mempool.space/address/{{ queried_address }}" target="_blank" rel="noopener noreferrer">کاوشگر مم‌پول ↗</a>
+          <a class="explorer-link" href="https://blockstream.info/address/{{ queried_address }}" target="_blank" rel="noopener noreferrer">کاوشگر بلاک‌استریم ↗</a>
+          <a class="explorer-link" href="https://www.blockchain.com/explorer/addresses/btc/{{ queried_address }}" target="_blank" rel="noopener noreferrer">کاوشگر بلاک‌چین ↗</a>
+        </div>
+        <p>هر پیوند، یک سایت خارجی را در زبانهٔ جدید باز می‌کند و آدرس عمومی را با آن سرویس به اشتراک می‌گذارد. مرورگر هیچ درخواست خودکاری به این سرویس‌ها نمی‌فرستد. نمایش آدرس، تضمین موجودی یا تأیید تراکنش نیست.</p>
+      </section>
       {% elif lookup_error %}
-      <p role="status">{% if lookup_error == 'not_found' %}پاکتی با این شمارهٔ سریال پیدا نشد.{% elif lookup_error == 'rate_limited' %}{{ limit_message }}{% else %}سرویس استعلام فعلاً در دسترس نیست.{% endif %}</p>
+      <p role="status">{% if lookup_error == 'not_found' %}پاکتی با این شمارهٔ سریال پیدا نشد.{% elif lookup_error == 'invalid_address' %}آدرس عمومی معتبر نیست؛ آن را دقیقاً از روی پاکت یا کیف پول کپی کنید.{% elif lookup_error == 'rate_limited' %}{{ limit_message }}{% else %}سرویس استعلام فعلاً در دسترس نیست.{% endif %}</p>
       {% else %}
-      <div class="callout"><strong>جاوااسکریپت غیرفعال است.</strong><p>با فرستادن شمارهٔ سریال، آدرس و کد تصویری در همین صفحه نمایش داده می‌شوند؛ هرگز کلمات بازیابی را وارد نکنید.</p></div>
+      <div class="callout"><strong>جاوااسکریپت غیرفعال است.</strong><p>با فرستادن شمارهٔ سریال یا آدرس عمومی، نتیجه در همین صفحه نمایش داده می‌شود؛ هرگز کلمات بازیابی را وارد نکنید.</p></div>
       {% endif %}
     </noscript>
   </div>
-  <aside class="lookup-aside"><span class="aside-symbol" aria-hidden="true">↗</span><h2>چه چیزی نمایش داده می‌شود؟</h2><p>آدرس عمومی ثبت‌شده و کد تصویری آن را می‌بینید. کد در همین سایت ساخته می‌شود. سه پیوند اختیاری هم برای دیدن تراکنش‌ها در سایت‌های دیگر هست.</p><p>مرورگر هیچ درخواست خودکاری به سایت‌های نمایش تراکنش نمی‌فرستد. به این سایت‌ها «کاوشگر بلاک» می‌گویند. اگر پیوند یکی را باز کنید، آن سایت آدرس عمومی و اطلاعات اتصال اینترنتی شما را می‌بیند.</p><p>شمارهٔ سریال و آدرس ثابت نمی‌کنند که پولی واریز شده، تراکنش تأیید شده یا پول متعلق به شماست.</p><a class="text-link" href="/guide">پیش از واریز، راهنما را بخوانید <span aria-hidden="true">←</span></a></aside>
+  <aside class="lookup-aside"><span class="aside-symbol" aria-hidden="true">↗</span><h2>چه چیزی نمایش داده می‌شود؟</h2><p>آدرس عمومی ثبت‌شده و کد تصویری آن را می‌بینید. کد در همین سایت ساخته می‌شود. سه پیوند اختیاری هم برای دیدن تراکنش‌ها در سایت‌های دیگر هست.</p><p>اگر آدرس عمومی را وارد کنید و آن آدرس در فهرست ما نباشد، فقط همان سه پیوند را می‌بینید تا خودتان بررسی کنید؛ موجودی را برای آدرس ناشناس از سرویس بیرونی نمی‌گیریم.</p><p>مرورگر هیچ درخواست خودکاری به سایت‌های نمایش تراکنش نمی‌فرستد. به این سایت‌ها «کاوشگر بلاک» می‌گویند. اگر پیوند یکی را باز کنید، آن سایت آدرس عمومی و اطلاعات اتصال اینترنتی شما را می‌بیند.</p><p>شمارهٔ سریال و آدرس ثابت نمی‌کنند که پولی واریز شده، تراکنش تأیید شده یا پول متعلق به شماست.</p><a class="text-link" href="/guide">پیش از واریز، راهنما را بخوانید <span aria-hidden="true">←</span></a></aside>
 </section>
 <section class="shell prose safety-summary"><p><strong>از غریبه پاکت نخرید.</strong> استعلام و موجودی، اصالت پاکت یا دسترسی انحصاری شما را ثابت نمی‌کنند.</p><a class="button" href="/guide#quick-guide">راهنمای استفاده و هشدارهای پاکت <span aria-hidden="true">←</span></a></section>
 <section class="article-end shell"><p>اگر کسی برای استعلام از شما کلمات بازیابی خواست، متوقف شوید.</p><a class="text-link" href="/terms">شرایط و مسئولیت‌ها <span aria-hidden="true">←</span></a></section>

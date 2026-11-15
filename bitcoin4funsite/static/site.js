@@ -68,6 +68,7 @@
   const form = document.getElementById("lookup-form");
   if (!form) return;
   const field = document.getElementById("serial");
+  const addressField = document.getElementById("address");
   const status = document.getElementById("lookup-status");
   const result = document.getElementById("lookup-result");
   const submit = document.getElementById("lookup-submit");
@@ -75,16 +76,23 @@
   let currentWallet = null;
   let balancePanel = null;
   // The native form and JS use the server's generator-derived grammar.
-  // (?![\s\S]) is an absolute end assertion; $ alone permits a final newline.
+  // (?![\\s\\S]) is an absolute end assertion; $ alone permits a final newline.
   const validSerial = new RegExp("^(?:" + (field.getAttribute("pattern") || "(?!)") + ")(?![\\s\\S])");
+  const validAddress = new RegExp("^(?:" +
+    ((addressField && addressField.getAttribute("pattern")) || "(?!)") + ")(?![\\s\\S])");
   let requestVersion = 0;
   let controller = null;
+
+  function addressValue() {
+    return addressField ? addressField.value : "";
+  }
 
   function invalidateLookup() {
     ++requestVersion;
     controller?.abort();
     controller = null;
     currentWallet = null;
+    balancePanel = null;
     result.hidden = true;
     result.replaceChildren();
     result.setAttribute("aria-busy", "false");
@@ -92,6 +100,7 @@
     announce("", "");
   }
   field.addEventListener("input", invalidateLookup);
+  if (addressField) addressField.addEventListener("input", invalidateLookup);
   window.addEventListener("pagehide", invalidateLookup);
 
   function announce(message, state) {
@@ -117,6 +126,21 @@
     return wallet && wallet.serial === serial && typeof wallet.address === 'string' &&
       /^bc1q[a-z0-9]{10,86}$/.test(wallet.address) &&
       wallet.explorer_url === 'https://mempool.space/address/' + wallet.address;
+  }
+
+  // The address API keeps its historical three-key body; the page adapts it to
+  // the same wallet shape the serial card already renders.
+  function addressWallet(body, address) {
+    if (!body || typeof body !== "object" || body.address !== address ||
+        typeof body.serial !== "string" || !validSerial.test(body.serial) ||
+        body.lookup_url !== "https://btc4.fun/s/" + body.serial) {
+      return null;
+    }
+    const wallet = { serial: body.serial, address,
+      explorer_url: "https://mempool.space/address/" + address };
+    if (body.balance) wallet.balance = body.balance;
+    if (body.public) wallet.public = body.public;
+    return wallet;
   }
 
   const PUBLIC_HOSTS = ["btc4.fun", "btc.saeb.id.ir", "b.tc4fun.ir"];
@@ -263,18 +287,36 @@
     return section;
   }
 
-  const balanceUnavailable = "موجودی فعلاً در دسترس نیست؛ این خطا به معنی صفر نیست. آدرس و کد تصویری همچنان قابل استفاده‌اند.";
-
-  function showBalance(wallet) {
-    const balance = wallet.balance;
-    if (balancePanel) {
-      balancePanel.replaceChildren();
-      balancePanel.hidden = true;
+  // Three opt-in explorer links, always derived from the address itself so a
+  // server-supplied URL can never redirect the user somewhere else.
+  function explorerLinks(address) {
+    const explorers = element("div", "explorer-links");
+    for (const [prefix, label] of [
+      ["https://mempool.space/address/", "کاوشگر مم‌پول ↗"],
+      ["https://blockstream.info/address/", "کاوشگر بلاک‌استریم ↗"],
+      ["https://www.blockchain.com/explorer/addresses/btc/", "کاوشگر بلاک‌چین ↗"]
+    ]) {
+      const explorer = element("a", "explorer-link", label);
+      explorer.href = prefix + address;
+      explorer.target = "_blank";
+      explorer.rel = "noopener noreferrer";
+      explorers.append(explorer);
     }
+    return explorers;
+  }
+
+  const balanceUnavailable = "موجودی فعلاً در دسترس نیست؛ این خطا به معنی صفر نیست. آدرس و کد تصویری همچنان قابل استفاده‌اند.";
+  const explorerWarning = "هر پیوند، یک سایت خارجی را در زبانهٔ جدید باز می‌کند و آدرس عمومی را با آن سرویس به اشتراک می‌گذارد. مرورگر هیچ درخواست خودکاری به این سرویس‌ها نمی‌فرستد. نمایش آدرس، تضمین موجودی یا تأیید تراکنش نیست.";
+
+  // The balance panel is the first block of the card, so the numbers are visible
+  // without scrolling on a phone.
+  function showBalance(wallet) {
+    const panel = balancePanel;
+    if (!panel) return;
+    panel.replaceChildren();
+    panel.hidden = true;
+    const balance = wallet.balance;
     if (!balance && !wallet.balance_error) return;
-    const panel = balancePanel || element("section");
-    if (!balancePanel) result.append(panel);
-    balancePanel = panel;
     panel.hidden = false;
     panel.setAttribute("aria-label", "موجودی آدرس عمومی");
     const valid = balance && balance.address === wallet.address &&
@@ -296,8 +338,8 @@
       ]) {
         const magnitude = BigInt(Math.abs(amount));
         const sign = amount < 0 ? '-' : signed && amount > 0 ? '+' : '';
-        const sats = element("p", "ltr-block", sign + magnitude);
-        const btc = element("p", "ltr-block", sign + magnitude / 100000000n + '.' +
+        const sats = element("p", "balance-value ltr-block", sign + magnitude);
+        const btc = element("p", "balance-value ltr-block", sign + magnitude / 100000000n + '.' +
           (magnitude % 100000000n).toString().padStart(8, '0'));
         sats.dir = btc.dir = "ltr";
         panel.append(element("h3", "", label), element("p", "", "ساتوشی"), sats,
@@ -312,18 +354,25 @@
     }
   }
 
+  // Bring the freshly rendered card to the top of the viewport so the balance
+  // block is on screen without the user hunting for it. This is a direct
+  // response to a click, never an automatic request.
+  function revealResult() {
+    if (typeof result.scrollIntoView === "function") {
+      result.scrollIntoView({ block: "start", behavior: "auto" });
+    }
+  }
+
   function showWallet(wallet) {
     if (currentWallet?.serial === wallet.serial && currentWallet.address === wallet.address && !result.hidden) {
       currentWallet = wallet;
       showBalance(wallet);
       return;
     }
-    balancePanel = null;
     currentWallet = wallet;
     const heading = element("h2", "", "آدرس عمومی این پاکت");
-    const serialLabel = element("p", "result-label", "شمارهٔ سریال");
-    const serial = element("p", "public-serial ltr-block", wallet.serial);
-    serial.dir = "ltr";
+    const balanceSlot = element("section", "balance-panel");
+    balanceSlot.hidden = true;
     const addressLabel = element("p", "result-label", "آدرس دریافت در شبکهٔ اصلی بیت‌کوین");
     const address = element("p", "public-address ltr-block", wallet.address);
     address.dir = "ltr";
@@ -338,6 +387,9 @@
         announce("کپی خودکار ممکن نشد. آدرس عمومی را از کادر بالا انتخاب و دستی کپی کنید.", "error");
       }
     });
+    const serialLabel = element("p", "result-label", "شمارهٔ سریال");
+    const serial = element("p", "public-serial ltr-block", wallet.serial);
+    serial.dir = "ltr";
     const figure = element("figure", "qr-block");
     const qr = element("img");
     qr.src = "/api/wallets/" + encodeURIComponent(wallet.serial) + "/qr.svg";
@@ -350,57 +402,95 @@
       caption.textContent = "کد تصویری فعلاً در دسترس نیست؛ از آدرس عمومی نوشته‌شده استفاده کنید.";
     });
     figure.append(qr, caption);
-    const explorers = element("div", "explorer-links");
-    for (const [prefix, label] of [
-      ["https://mempool.space/address/", "کاوشگر مم‌پول ↗"],
-      ["https://blockstream.info/address/", "کاوشگر بلاک‌استریم ↗"],
-      ["https://www.blockchain.com/explorer/addresses/btc/", "کاوشگر بلاک‌چین ↗"]
-    ]) {
-      const explorer = element("a", "explorer-link", label);
-      explorer.href = prefix + wallet.address;
-      explorer.target = "_blank";
-      explorer.rel = "noopener noreferrer";
-      explorers.append(explorer);
-    }
-    const warning = element("p", "result-warning", "هر پیوند، یک سایت خارجی را در زبانهٔ جدید باز می‌کند و آدرس عمومی را با آن سرویس به اشتراک می‌گذارد. مرورگر هیچ درخواست خودکاری به این سرویس‌ها نمی‌فرستد. نمایش آدرس، تضمین موجودی یا تأیید تراکنش نیست.");
-    const nodes = [heading, serialLabel, serial, addressLabel, address, copy, figure];
+    const warning = element("p", "result-warning", explorerWarning);
+    const nodes = [heading, balanceSlot, addressLabel, address, copy, serialLabel, serial, figure];
     const optional = publicBlock(wallet);
     if (optional !== null) nodes.push(optional);
-    nodes.push(explorers, warning);
+    nodes.push(explorerLinks(wallet.address), warning);
     result.replaceChildren(...nodes);
     result.hidden = false;
+    balancePanel = balanceSlot;
     showBalance(wallet);
+    revealResult();
   }
 
-  async function lookup(serial, withBalance = false) {
+  // A valid address that is simply not ours is not a dead end: the user still
+  // gets the three explorer links, and we never ask a third party for a balance.
+  function showAddressNotFound(address) {
+    currentWallet = null;
+    balancePanel = null;
+    const heading = element("h2", "", "این آدرس در فهرست ما ثبت نشده است");
+    const message = element("p", "", "این آدرس عمومی در فهرست پاکت‌های ما نیست. اگر پاکت را از ما نخریده‌اید یا آدرس را خودتان ساخته‌اید، این طبیعی است. موجودی را برای این آدرس از سرویس بیرونی نمی‌گیریم.");
+    const addressLabel = element("p", "result-label", "آدرس عمومی");
+    const addressNode = element("p", "public-address ltr-block", address);
+    addressNode.dir = "ltr";
+    result.replaceChildren(heading, message, addressLabel, addressNode,
+      explorerLinks(address), element("p", "result-warning", explorerWarning));
+    result.hidden = false;
+    revealResult();
+  }
+
+  const notRegisteredMessage = "این آدرس در فهرست ما ثبت نشده است. سه پیوند کاوشگر برای بررسی خودتان نمایش داده شد؛ موجودی را ما نمی‌گیریم.";
+
+  function currentQuery() {
+    // Never normalize: a leading or trailing space is a different token and the
+    // server would reject it anyway.
+    const serial = field.value;
+    if (serial) return { mode: "serial", value: serial };
+    const address = addressValue();
+    if (address) return { mode: "address", value: address };
+    return { mode: "serial", value: "" };
+  }
+
+  async function lookup(withBalance = false) {
     const version = ++requestVersion;
     controller?.abort();
     controller = new AbortController();
     balanceSubmit.disabled = false;
     result.setAttribute("aria-busy", "false");
     submit.disabled = false;
-    const retained = withBalance && currentWallet?.serial === serial ? {
-      serial, address: currentWallet.address, explorer_url: currentWallet.explorer_url
-    } : null;
+    const { mode, value } = currentQuery();
+    const retained = withBalance && currentWallet && !result.hidden &&
+      (mode === "serial" ? currentWallet.serial === value : currentWallet.address === value)
+      ? { serial: currentWallet.serial, address: currentWallet.address,
+          explorer_url: currentWallet.explorer_url }
+      : null;
     if (retained) showWallet(retained);
     else {
       currentWallet = null;
+      balancePanel = null;
       result.hidden = true;
       result.replaceChildren();
     }
-    if (!validSerial.test(serial)) {
-      field.setAttribute("aria-invalid", "true");
-      announce("شمارهٔ سریال معتبر نیست. فقط حروف و ارقام انگلیسی، خط تیره یا زیرخط وارد کنید؛ آغاز آن باید حرف یا رقم باشد.", "error");
+    if (!value) {
+      announce("شمارهٔ سریال یا آدرس عمومی را وارد کنید.", "error");
       field.focus();
       return;
     }
-    field.removeAttribute("aria-invalid");
+    if (mode === "serial") {
+      if (!validSerial.test(value)) {
+        field.setAttribute("aria-invalid", "true");
+        announce("شمارهٔ سریال معتبر نیست. فقط حروف و ارقام انگلیسی، خط تیره یا زیرخط وارد کنید؛ آغاز آن باید حرف یا رقم باشد.", "error");
+        field.focus();
+        return;
+      }
+      field.removeAttribute("aria-invalid");
+    } else {
+      if (!validAddress.test(value)) {
+        if (addressField) addressField.setAttribute("aria-invalid", "true");
+        announce("آدرس عمومی معتبر نیست. آدرسی که با bc1q شروع می‌شود و ۴۲ نویسه دارد را کامل و بدون فاصله وارد کنید.", "error");
+        if (addressField) addressField.focus();
+        return;
+      }
+      if (addressField) addressField.removeAttribute("aria-invalid");
+    }
     result.setAttribute("aria-busy", "true");
     submit.disabled = true;
     balanceSubmit.disabled = true;
     announce(withBalance ? "در حال دریافت موجودی…" : "در حال پیدا کردن آدرس عمومی…", "loading");
+    const path = mode === "serial" ? "/api/wallets/" : "/api/addresses/";
     try {
-      const response = await fetch("/api/wallets/" + encodeURIComponent(serial) + (withBalance ? "?balance=1" : ""), {
+      const response = await fetch(path + encodeURIComponent(value) + (withBalance ? "?balance=1" : ""), {
         method: "GET",
         credentials: "same-origin",
         redirect: "error",
@@ -416,20 +506,33 @@
       if (response.status === 404) {
         currentWallet = null;
         balancePanel = null;
-        result.replaceChildren();
-        result.hidden = true;
-        announce("پاکتی با این شمارهٔ سریال پیدا نشد. حروف و ارقام را دوباره با روی پاکت تطبیق دهید.", "error");
+        if (mode === "address") {
+          showAddressNotFound(value);
+          announce(notRegisteredMessage, "notice");
+        } else {
+          result.replaceChildren();
+          result.hidden = true;
+          announce("پاکتی با این شمارهٔ سریال پیدا نشد. حروف و ارقام را دوباره با روی پاکت تطبیق دهید.", "error");
+        }
         return;
       }
       if (response.status === 400) {
-        field.setAttribute("aria-invalid", "true");
-        announce("شمارهٔ سریال معتبر نیست. آن را دقیقاً مطابق روی پاکت وارد کنید.", "error");
+        if (mode === "address") {
+          if (addressField) addressField.setAttribute("aria-invalid", "true");
+          announce("آدرس عمومی معتبر نیست. آن را دقیقاً از روی پاکت یا کیف پول کپی کنید.", "error");
+        } else {
+          field.setAttribute("aria-invalid", "true");
+          announce("شمارهٔ سریال معتبر نیست. آن را دقیقاً مطابق روی پاکت وارد کنید.", "error");
+        }
         return;
       }
       if (!response.ok && !(withBalance && response.status === 503)) throw new Error("Lookup unavailable");
-      const wallet = await response.json();
+      const body = await response.json();
       if (version !== requestVersion) return;
-      if (!validWallet(wallet, serial)) {
+      const wallet = mode === "serial"
+        ? (validWallet(body, value) ? body : null)
+        : addressWallet(body, value);
+      if (!wallet) {
         throw new Error("Unexpected public wallet response");
       }
       if (withBalance && !wallet.balance) wallet.balance_error = 'unavailable';
@@ -451,21 +554,27 @@
 
   field.addEventListener("invalid", (event) => {
     event.preventDefault();
-    return lookup(field.value);
+    return lookup();
   });
+  if (addressField) {
+    addressField.addEventListener("invalid", (event) => {
+      event.preventDefault();
+      return lookup();
+    });
+  }
 
   form.addEventListener("submit", (event) => {
     // Ordinary API lookup intentionally omits public metadata; submit natively.
     if (event.submitter !== balanceSubmit) return;
     event.preventDefault();
-    return lookup(field.value, event.submitter === balanceSubmit);
+    return lookup(true);
   });
 
-  if (form.dataset.initialSerial) {
+  const initialState = form.dataset.initialState;
+  if (form.dataset.initialSerial || initialState) {
     const serial = form.dataset.initialSerial;
-    const state = form.dataset.initialState;
     const wallet = { serial, address: form.dataset.initialAddress, explorer_url: form.dataset.initialExplorer };
-    if (state === 'found' && validSerial.test(serial) && validWallet(wallet, serial)) {
+    if (initialState === 'found' && validSerial.test(serial) && validWallet(wallet, serial)) {
       try { wallet.public = JSON.parse(form.dataset.initialPublic || 'null'); }
       catch { wallet.public = null; }
       try { wallet.balance = JSON.parse(form.dataset.initialBalance || 'null'); }
@@ -473,14 +582,22 @@
       if (form.dataset.balanceError) wallet.balance_error = 'unavailable';
       showWallet(wallet);
       announce(wallet.balance_error ? balanceUnavailable : "آدرس عمومی پیدا شد. پیش از واریز، آدرس کامل و شبکه را بررسی کنید.", wallet.balance_error ? "error" : "success");
-    } else if (state === 'rate_limited') {
+    } else if (initialState === 'address_not_found') {
+      const address = addressValue();
+      if (validAddress.test(address)) {
+        showAddressNotFound(address);
+        announce(notRegisteredMessage, "notice");
+      }
+    } else if (initialState === 'rate_limited') {
       announce(limitedMessage(form.dataset.retryAfter), "error");
-    } else if (state === 'not_found') {
+    } else if (initialState === 'not_found') {
       announce("پاکتی با این شمارهٔ سریال پیدا نشد. حروف و ارقام را دوباره با روی پاکت تطبیق دهید.", "error");
-    } else if (state) {
+    } else if (initialState === 'invalid_address') {
+      announce("آدرس عمومی معتبر نیست. آن را دقیقاً از روی پاکت یا کیف پول کپی کنید.", "error");
+    } else if (initialState) {
       announce("سرویس استعلام فعلاً در دسترس نیست؛ کمی بعد دوباره تلاش کنید.", "error");
     } else {
-      lookup(serial);
+      lookup();
     }
   }
 })();

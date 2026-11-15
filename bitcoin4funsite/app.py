@@ -267,14 +267,17 @@ def create_app(config=None):
     @app.before_request
     def validate_api_serial():
         if request.endpoint in {'lookup_page', 'serial_page', 'wallet', 'wallet_qr'}:
-            allowed = {'serial', 'balance'} if request.endpoint == 'lookup_page' else {'balance'}
+            # The page accepts one serial or one public address, never both at
+            # once in a way that could be ambiguous: the serial wins in
+            # render_lookup, and the address is only read when it is empty.
+            allowed = {'serial', 'address', 'balance'} if request.endpoint == 'lookup_page' else {'balance'}
             if request.endpoint == 'wallet_qr':
                 allowed = set()
             if (set(request.args) - allowed
                     or any(len(request.args.getlist(key)) != 1 for key in request.args)
                     or ('balance' in request.args and request.args['balance'] != '1')
                     or (request.endpoint == 'lookup_page' and 'balance' in request.args
-                        and not request.args.get('serial'))):
+                        and not (request.args.get('serial') or request.args.get('address')))):
                 return jsonify(error='invalid_lookup_request'), 400
         if request.path.startswith('/api/addresses/'):
             # Validate the raw (still percent-encoded) path segment so control
@@ -462,9 +465,12 @@ def create_app(config=None):
     @app.get('/lookup')
     def lookup_page():
         serial = request.args.get('serial', '')
+        address = request.args.get('address', '')
         if serial and SERIAL_RE.fullmatch(serial) is None:
             abort(400)
-        return render_lookup(serial)
+        if address and not valid_address(address):
+            abort(400)
+        return render_lookup(serial, address)
 
     @app.get('/s/<serial>')
     @app.get('/<serial>')
@@ -473,7 +479,7 @@ def create_app(config=None):
             abort(404)
         return render_lookup(serial)
 
-    def render_lookup(serial):
+    def render_lookup(serial, address=''):
         wallet = None
         error = None
         status = 200
@@ -491,8 +497,34 @@ def create_app(config=None):
                     retry_after = response[0].headers.get('Retry-After')
             else:
                 wallet = response.get_json()
-        html = render_template('lookup.html', serial=serial, wallet=wallet, lookup_error=error,
-                               lookup_retry_after=retry_after, serial_pattern=SERIAL_PATTERN)
+        elif address:
+            # The page reuses the public address API contract; only the shape
+            # handed to the template is adapted to the serial result card.
+            body, status, retry_after = address_lookup(
+                address, with_balance=request.args.get('balance') == '1', include_public=True)
+            if 'serial' in body and 'address' in body:
+                wallet = {'serial': body['serial'], 'address': body['address'],
+                          'explorer_url': 'https://mempool.space/address/' + body['address']}
+                for key in ('public', 'balance'):
+                    if key in body:
+                        wallet[key] = body[key]
+                if body.get('error') == 'balance_unavailable':
+                    wallet['balance_error'] = 'unavailable'
+            elif status == 404:
+                # A valid address that is simply not ours is not an error page:
+                # it still gets the three opt-in explorer links.
+                error = 'address_not_found'
+                status = 200
+            elif status == 400:
+                error = 'invalid_address'
+                status = 200
+            elif status == 429:
+                error = 'rate_limited'
+            else:
+                error = 'unavailable'
+        html = render_template('lookup.html', serial=serial, address=address, wallet=wallet,
+                               lookup_error=error, lookup_retry_after=retry_after,
+                               serial_pattern=SERIAL_PATTERN)
         return html, status, ({'Retry-After': retry_after} if retry_after else {})
 
     @app.get('/healthz')
@@ -563,21 +595,27 @@ def create_app(config=None):
             app.logger.warning('Tag inquiry unavailable')
             return jsonify(error='tag_unavailable'), 503
 
-    @app.get('/api/addresses/<path:address>')
-    def address_serial(address):
+    def address_lookup(address, *, with_balance, include_public=False):
+        """Shared public address lookup: the API route and the page route.
+
+        Returns (body, status, retry_after). The API response shape is fixed by
+        the Android consumer, so include_public stays False there unless the
+        caller asked for balance=1, exactly as before.
+        """
         admission = lookup_admission('address_' + address, qr=False)
         if admission is not None:
-            return admission
+            response, status = admission
+            return response.get_json(), status, response.headers.get('Retry-After')
         try:
             lookup = app.config.get('ADDRESS_LOOKUP')
             record = lookup(address) if lookup is not None else database_lookup(address, by_address=True)
             if record is None:
-                return jsonify(error='not_found'), 404
+                return {'error': 'not_found'}, 404, None
             serial = record['serial']
             if record['address'] != address or SERIAL_RE.fullmatch(serial) is None:
                 raise ValueError('Invalid public wallet')
             body = dict(address=address, serial=serial, lookup_url='https://btc4.fun/s/' + serial)
-            if request.args.get('balance') == '1':
+            if with_balance:
                 # Same balance object as /api/wallets?balance=1.
                 service = app.config.get('SERIAL_BALANCE')
                 if service is None:
@@ -587,14 +625,25 @@ def create_app(config=None):
                     body['balance'] = service.balance(address)
                 except Exception:
                     app.logger.warning('Public address balance unavailable')
-                    return jsonify(**body, error='balance_unavailable'), 503
+                    return dict(body, error='balance_unavailable'), 503, None
+            if include_public:
                 public = public_payload(record)
                 if public is not None:
                     body['public'] = public
-            return jsonify(body)
+            return body, 200, None
         except Exception:
             app.logger.warning('Public address lookup unavailable')
-            return jsonify(error='unavailable'), 503
+            return {'error': 'unavailable'}, 503, None
+
+    @app.get('/api/addresses/<path:address>')
+    def address_serial(address):
+        with_balance = request.args.get('balance') == '1'
+        body, status, retry_after = address_lookup(
+            address, with_balance=with_balance, include_public=with_balance)
+        response = jsonify(body)
+        if retry_after:
+            response.headers['Retry-After'] = retry_after
+        return response, status
 
     def lookup_admission(serial, *, qr=False):
         try:

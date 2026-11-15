@@ -401,7 +401,17 @@ assert.ok(all().some(n=>/موجودی.*دسترس نیست/.test(n.textContent))
         field = document.by_id("serial")
         self.assertEqual(field["name"], "serial")
         self.assertEqual(field["dir"], "ltr")
-        self.assertIn("required", field)
+        # Two inputs share one native form, so neither may be `required`: an
+        # address-only submission must still work without JavaScript.
+        self.assertNotIn("required", field)
+        address = document.by_id("address")
+        self.assertEqual(address["name"], "address")
+        self.assertEqual(address["dir"], "ltr")
+        self.assertNotIn("required", address)
+        self.assertEqual(address["pattern"], "bc1q[02-9ac-hj-np-z]{38}")
+        # Serial stays first: it is what is printed on the envelope.
+        self.assertLess(source.index('id="serial"'), source.index('id="address"'))
+        self.assertLess(source.index('for="serial"'), source.index('for="address"'))
         self.assertEqual(document.by_id("lookup-status")["aria-live"], "polite")
         self.assertEqual(document.by_id("lookup-status")["aria-atomic"], "true")
         self.assertIn("hidden", document.by_id("lookup-result"))
@@ -410,14 +420,18 @@ assert.ok(all().some(n=>/موجودی.*دسترس نیست/.test(n.textContent))
         self.assertIn("سه پیوند اختیاری", source)
         self.assertIn("مرورگر هیچ درخواست خودکاری", source)
         self.assertNotRegex(source, r'<(?:img|iframe)[^>]+src="https?://')
-        dangerous = '\"><img src=x onerror=alert(1)>'
+        dangerous = '"><img src=x onerror=alert(1)>'
         initial = Document(self.render("lookup.html", serial=dangerous))
         self.assertEqual(initial.by_id("serial")["value"], dangerous)
         self.assertEqual([attrs['src'] for tag, attrs in initial.elements if tag == 'img'],
                          ['/static/logo.png'])
         self.assertFalse(any(key.startswith("on") for _, attrs in initial.elements for key in attrs))
+        # A reflected address is escaped the same way and never becomes markup.
+        reflected = Document(self.render("lookup.html", address=dangerous))
+        self.assertEqual(reflected.by_id("address")["value"], dangerous)
+        self.assertFalse(any(key.startswith("on") for _, attrs in reflected.elements for key in attrs))
 
-    def run_lookup_script(self, scenario, initial="", initial_state="", retry_after="", initial_balance="null", balance_error="", initial_address="bc1qsyntheticpublicfixture", initial_public="null"):
+    def run_lookup_script(self, scenario, initial="", initial_state="", retry_after="", initial_balance="null", balance_error="", initial_address="bc1qsyntheticpublicfixture", initial_public="null", address_input="", address_pattern=None):
         self.assertIsNotNone(shutil.which("node"), "Node is required for the offline JavaScript behavior contract")
         harness = r'''
 const assert = require('node:assert/strict');
@@ -435,7 +449,7 @@ class Element {
   focus() { this.focused=true; }
   async emit(name, extra={}) { await Promise.all((this.listeners[name] || []).map(handler => handler({preventDefault(){}, ...extra}))); }
 }
-const ids=Object.fromEntries(['lookup-form','serial','lookup-submit','balance-submit','lookup-status','lookup-result'].map(id=>[id,new Element()]));
+const ids=Object.fromEntries(['lookup-form','serial','address','lookup-submit','balance-submit','lookup-status','lookup-result'].map(id=>[id,new Element()]));
 ids['lookup-form'].dataset.initialSerial=process.argv[2];
 ids['lookup-form'].dataset.initialState=process.argv[3];
 ids['lookup-form'].dataset.retryAfter=process.argv[5];
@@ -446,6 +460,8 @@ ids['lookup-form'].dataset.initialPublic=process.argv[9];
 ids['lookup-form'].dataset.initialExplorer='https://mempool.space/address/'+process.argv[8];
 ids.serial.value=process.argv[2];
 ids.serial.setAttribute('pattern', process.argv[4]);
+ids.address.value=process.argv[10];
+ids.address.setAttribute('pattern', process.argv[11]);
 ids['lookup-result'].hidden=true;
 global.document={getElementById:id=>ids[id] || null, createElement:tag=>new Element(tag), createTextNode:text=>Object.assign(new Element('#text'),{textContent:text})};
 global.window={isSecureContext:true, location:{origin:'http://localhost'}, listeners:{}, addEventListener(name, handler){this.listeners[name]=handler;}};
@@ -457,6 +473,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const all=()=>{const found=[]; const walk=node=>{found.push(node);node.children.forEach(walk);}; walk(ids['lookup-result']); return found;};
 // Legacy transport/error scenarios now exercise only the explicit balance enhancement.
 const submit=async serial=>{ids.serial.value=serial; await ids['lookup-form'].emit('submit',{submitter:ids['balance-submit']}); await tick();};
+const submitAddress=async address=>{ids.serial.value='';ids.address.value=address; await ids['lookup-form'].emit('submit',{submitter:ids['balance-submit']}); await tick();};
 vm.runInThisContext(fs.readFileSync(process.argv[1], 'utf8'));
 '''
         # Use the rendered production field, not a copied JS grammar.
@@ -467,8 +484,11 @@ vm.runInThisContext(fs.readFileSync(process.argv[1], 'utf8'));
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         html = module.create_app({'TESTING': True}).test_client().get('/lookup').text
-        pattern = Document(html).by_id('serial')['pattern']
-        result = subprocess.run(["node", "-e", harness + "\n(async()=>{\n" + scenario + "\n})().catch(error=>{console.error(error); process.exitCode=1;});", str(ROOT / "static/site.js"), initial, initial_state, pattern, retry_after, initial_balance, balance_error, initial_address, initial_public], capture_output=True, text=True, timeout=15)
+        document = Document(html)
+        pattern = document.by_id('serial')['pattern']
+        if address_pattern is None:
+            address_pattern = document.by_id('address')['pattern']
+        result = subprocess.run(["node", "-e", harness + "\n(async()=>{\n" + scenario + "\n})().catch(error=>{console.error(error); process.exitCode=1;});", str(ROOT / "static/site.js"), initial, initial_state, pattern, retry_after, initial_balance, balance_error, initial_address, initial_public, address_input, address_pattern], capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_initial_public_hydrates_safely_without_network(self):
@@ -515,6 +535,149 @@ assert.equal(all().some(n=>n.textContent===label), {str(size <= 32).lower()});
 assert.equal(all().some(n=>n.href==='https://example.invalid/profile'), {str(size <= 32).lower()});
 ''', initial='Serial_710587k45300', initial_state='found',
                     initial_public=json.dumps({'links': {'😀' * size: 'https://example.invalid/profile'}}, ensure_ascii=False))
+
+    def test_address_lookup_in_database_renders_the_same_card(self):
+        self.run_lookup_script(r'''
+const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+const serial='Serial_710587k45300';
+handler=async()=>({ok:true,status:200,json:async()=>({address,serial,
+  lookup_url:'https://btc4.fun/s/'+serial,
+  balance:{address,confirmed_sats:500,pending_delta_sats:-50,source:'https://blockstream.info/api',fetched_at:'1970-01-01T00:16:40+00:00'}})});
+await submitAddress(address);
+assert.equal(requests.length,1);
+assert.equal(requests[0].url,'/api/addresses/'+address+'?balance=1');
+assert.equal(requests[0].options.credentials,'same-origin');
+assert.equal(requests[0].options.redirect,'error');
+assert.equal(ids['lookup-result'].hidden,false);
+assert.ok(all().some(n=>n.textContent===serial && n.dir==='ltr'));
+assert.ok(all().some(n=>n.textContent===address && n.dir==='ltr'));
+assert.ok(all().some(n=>n.textContent==='500'));
+assert.ok(all().some(n=>n.textContent==='0.00000500'));
+assert.ok(all().some(n=>n.textContent==='-50'));
+const image=all().find(n=>n.tagName==='img');
+assert.equal(image.src,'/api/wallets/'+serial+'/qr.svg');
+const explorers=all().filter(n=>n.tagName==='a');
+assert.deepEqual(explorers.map(n=>n.href),[
+  'https://mempool.space/address/'+address,
+  'https://blockstream.info/address/'+address,
+  'https://www.blockchain.com/explorer/addresses/btc/'+address]);
+assert.equal(requests.length,1,'Explorer links must never be prefetched');
+''')
+
+    def test_address_not_in_database_shows_three_explorer_links_and_no_balance(self):
+        self.run_lookup_script(r'''
+const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+handler=async()=>({ok:false,status:404});
+await submitAddress(address);
+assert.equal(requests.length,1);
+assert.equal(requests[0].url,'/api/addresses/'+address+'?balance=1');
+assert.equal(ids['lookup-result'].hidden,false);
+assert.match(ids['lookup-status'].textContent,/ثبت نشده/);
+assert.ok(all().some(n=>n.textContent===address && n.dir==='ltr'));
+const links=all().filter(n=>n.tagName==='a');
+assert.deepEqual(links.map(n=>n.href),[
+  'https://mempool.space/address/'+address,
+  'https://blockstream.info/address/'+address,
+  'https://www.blockchain.com/explorer/addresses/btc/'+address]);
+for (const link of links) {
+  assert.equal(link.target,'_blank');
+  assert.equal(link.rel,'noopener noreferrer');
+}
+assert.ok(!all().some(n=>n.textContent==='0.00000000'),'Never invent a zero balance');
+assert.ok(!all().some(n=>n.textContent==='موجودی تأییدشده'));
+assert.equal(all().filter(n=>n.tagName==='img').length,0,'No QR for an unknown address');
+assert.equal(requests.length,1,'No retry and no extra balance request');
+''')
+
+    def test_balance_renders_before_the_address_and_serial(self):
+        self.run_lookup_script(r'''
+const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+const serial='Serial_710587k45300';
+handler=async()=>({ok:true,status:200,json:async()=>({address,serial,
+  lookup_url:'https://btc4.fun/s/'+serial,
+  balance:{address,confirmed_sats:500,pending_delta_sats:-50,source:'https://blockstream.info/api',fetched_at:'1970-01-01T00:16:40+00:00'}})});
+await submitAddress(address);
+const nodes=all();
+const balance=nodes.findIndex(n=>n.textContent==='موجودی تأییدشده');
+const addressAt=nodes.findIndex(n=>n.textContent===address);
+const serialAt=nodes.findIndex(n=>n.textContent===serial);
+const qrAt=nodes.findIndex(n=>n.tagName==='img');
+assert.ok(balance>=0 && addressAt>=0 && serialAt>=0 && qrAt>=0);
+assert.ok(balance<addressAt,'Balance must come before the address');
+assert.ok(addressAt<serialAt,'Address must come before the serial');
+assert.ok(serialAt<qrAt,'Serial must come before the QR');
+''')
+        # The same order holds for the server-rendered serial card.
+        self.run_lookup_script(r'''
+await tick();
+const nodes=all();
+const balance=nodes.findIndex(n=>n.textContent==='موجودی تأییدشده');
+const addressAt=nodes.findIndex(n=>n.textContent==='bc1qsyntheticpublicfixture');
+const serialAt=nodes.findIndex(n=>n.textContent==='Serial_710587k45300');
+assert.ok(balance>=0 && balance<addressAt && addressAt<serialAt);
+''', initial='Serial_710587k45300', initial_state='found',
+            initial_balance='{"address":"bc1qsyntheticpublicfixture","confirmed_sats":500,"pending_delta_sats":-50,"source":"https://blockstream.info/api","fetched_at":"1970-01-01T00:16:40+00:00"}')
+
+    def test_address_hydration_from_the_server_renders_without_any_request(self):
+        self.run_lookup_script(r'''
+await tick();
+assert.equal(requests.length,0,'The server already looked the address up');
+assert.equal(ids['lookup-result'].hidden,false);
+assert.ok(all().some(n=>n.textContent==='Serial_710587k45300'));
+assert.ok(all().some(n=>n.textContent==='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu'));
+''', initial='Serial_710587k45300', initial_state='found',
+            initial_address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
+            address_input='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu')
+        self.run_lookup_script(r'''
+await tick();
+assert.equal(requests.length,0,'An unregistered address must not be re-queried');
+assert.equal(ids['lookup-result'].hidden,false);
+assert.match(ids['lookup-status'].textContent,/ثبت نشده/);
+const links=all().filter(n=>n.tagName==='a');
+assert.equal(links.length,3);
+assert.equal(links[0].href,'https://mempool.space/address/bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu');
+''', initial_state='address_not_found',
+            address_input='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu')
+
+    def test_invalid_address_is_rejected_without_network_or_explorer_links(self):
+        self.run_lookup_script(r'''
+for (const address of ['', 'bc1q', 'BC1QCR8TE4KR609GCAWUTMRZA0J4XV80JY8Z306FYU',
+                       'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fy',
+                       ' bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
+                       'tb1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu']) {
+  await submitAddress(address);
+  assert.equal(requests.length,0,'Reject malformed address exactly: '+JSON.stringify(address));
+  assert.equal(ids['lookup-result'].hidden,true);
+  assert.equal(all().filter(n=>n.tagName==='a').length,0,'No explorer links for a bad address');
+}
+assert.equal(ids['lookup-status'].dataset.state,'error');
+''')
+
+    def test_address_quota_and_unavailable_keep_the_page_honest(self):
+        self.run_lookup_script(r'''
+const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+handler=async()=>({ok:false,status:429,headers:{get:()=> '43'}});
+await submitAddress(address);
+assert.match(ids['lookup-status'].textContent,/۴۳ ثانیه/);
+assert.equal(ids['lookup-result'].hidden,true);
+handler=async()=>{throw new Error('synthetic network failure');};
+await submitAddress(address);
+assert.match(ids['lookup-status'].textContent,/دسترس نیست/);
+assert.equal(requests.length,2,'No automatic retry');
+''')
+
+    def test_serial_wins_when_both_fields_are_filled(self):
+        self.run_lookup_script(r'''
+const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
+ids.serial.value='Serial_710587k45300';
+ids.address.value=address;
+handler=async()=>({ok:true,status:200,json:async()=>({serial:'Serial_710587k45300',address,
+  explorer_url:'https://mempool.space/address/'+address})});
+await ids['lookup-form'].emit('submit',{submitter:ids['balance-submit']});
+await tick();
+assert.equal(requests.length,1);
+assert.equal(requests[0].url,'/api/wallets/Serial_710587k45300?balance=1');
+''')
 
     def test_ordinary_submit_keeps_native_default_and_does_not_fetch(self):
         self.run_lookup_script(r'''

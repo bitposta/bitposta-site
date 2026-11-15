@@ -106,8 +106,10 @@ class PublicMetadataApi(unittest.TestCase):
 
     def test_normal_form_submission_does_not_use_json_lookup(self):
         source = (ROOT / 'static' / 'site.js').read_text()
-        self.assertIn('event.submitter === balanceSubmit', source)
+        # Only the explicit balance button is intercepted; every other submit
+        # keeps the native GET so the server renders the result.
         self.assertIn('if (event.submitter !== balanceSubmit) return;', source)
+        self.assertNotIn('event.submitter === balanceSubmit', source)
 
     def test_serial_balance_flag_adds_optional_public(self):
         client = self.build(dict(address=ADDRESS, serial=SERIAL, **FULL_PUBLIC))
