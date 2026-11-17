@@ -2,7 +2,7 @@
 
 Asset: `bitcoin4funsite/static/seal.svg`
 
-Copyright Saeb Molaee — btc4.fun. All rights reserved to the extent the rights holder owns applicable rights in this artwork.
+Copyright Saeb Molaee — bitposta.com. All rights reserved to the extent the rights holder owns applicable rights in this artwork.
 
 This specific seal design is excluded from the repository's general PolyForm Noncommercial license. Publication of its source is not permission to reproduce, adapt, distribute or use the design to manufacture seals, stamps, dies, embossers, molds, or imitations for envelopes or other goods. Such use requires the rights holder's prior written permission. Viewing the image as served by this website, and technical caching necessary for that viewing, are permitted. Mandatory statutory exceptions and third-party rights remain unaffected.
 
