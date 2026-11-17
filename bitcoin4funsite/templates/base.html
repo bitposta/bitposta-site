@@ -3,13 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="{% block meta_description %}بیت‌کوین برای تجربه کردن؛ راهنمای سادهٔ پاکت کاغذی، یادگیری و نگهداری مسئولانه.{% endblock %}">
+  <meta name="description" content="{% block meta_description %}کیف پول کاغذی بیت‌کوین و پیپروالت: پاکت کاغذی با آدرس عمومی و کلمات بازیابی؛ راهنمای ساده برای خرید و نگهداری بیت‌کوین کاغذی.{% endblock %}">
   <meta name="color-scheme" content="light">
-  <title>{% block title %}بیت‌کوین برای سرگرمی؛ یک تجربهٔ کاغذی{% endblock %}</title>
+  <title>{% block title %}کیف پول کاغذی؛ بیت‌کوین برای سرگرمی{% endblock %}</title>
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="بیت‌پستا">
+  <meta property="og:locale" content="fa_IR">
+  <meta property="og:title" content="{% block og_title %}کیف پول کاغذی بیت‌کوین | بیت‌پستا{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}کیف پول کاغذی بیت‌کوین (پیپروالت): پاکت کاغذی با آدرس عمومی، سریال و کلمات بازیابی؛ راهنمای ساده برای خرید و نگهداری بیت‌کوین کاغذی.{% endblock %}">
+  {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+  <meta name="twitter:card" content="summary">
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/site.css">
   <script src="/static/site.js" defer></script>
+  <script type="application/ld+json">{{ (seo_structured_data or [])|tojson }}</script>
   {% block scripts %}{% endblock %}
 </head>
 <body>

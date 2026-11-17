@@ -262,7 +262,44 @@ def create_app(config=None):
             '/costs': 'https://bitposta.com/costs',
             '/aml': 'https://bitposta.com/aml',
         }
-        return {'canonical_url': canonical_paths.get(request.path)}
+        # Structured data is built from the SAME fixed allowlist so a crawler
+        # never reads a Host-derived origin. Both blocks are emitted on every
+        # page; the product node describes what the site actually sells.
+        pages = {
+            '/': ('وب‌سایت', 'کیف پول کاغذی بیت‌کوین؛ پاکت کاغذی و پیپروالت'),
+            '/guide': ('مقاله', 'راهنمای کیف پول کاغذی و بیت‌کوین کاغذی'),
+            '/security': ('مقاله', 'مراقبت از کیف پول کاغذی و کلمات بازیابی'),
+            '/terms': ('مقاله', 'شرایط خرید و مسئولیت‌های پاکت بیت‌کوین'),
+            '/download': ('مقاله', 'برنامهٔ اندروید برای خواندن برچسب پاکت'),
+            '/costs': ('مقاله', 'هزینه‌های شفاف کیف پول کاغذی بیت‌کوین'),
+            '/aml': ('مقاله', 'سقف واریز و پول‌شویی در کیف پول کاغذی'),
+        }
+        canonical = canonical_paths.get(request.path)
+        structured = []
+        if canonical:
+            # Key the node on the CANONICAL path, not request.path, so an alias
+            # such as /t renders byte-identical HTML to /terms.
+            canonical_path = request.path
+            if canonical == 'https://bitposta.com/terms':
+                canonical_path = '/terms'
+            name, page_title = pages.get(canonical_path, ('وب‌سایت', 'بیت‌پستا'))
+            structured = [
+                {'@context': 'https://schema.org', '@type': 'WebSite',
+                 'name': 'بیت‌پستا', 'alternateName': 'bitposta',
+                 'url': 'https://bitposta.com/', 'inLanguage': 'fa-IR',
+                 'description': 'کیف پول کاغذی بیت‌کوین (پیپروالت) و راهنمای فارسی خرید بیت‌کوین کاغذی.'},
+                {'@context': 'https://schema.org', '@type': 'Product',
+                 'name': 'کیف پول کاغذی بیت‌کوین (پیپروالت)',
+                 'alternateName': ['بیت‌کوین کاغذی', 'پیپروالت', 'paper wallet'],
+                 'description': 'پاکت کاغذی با پاکت بیرونی آدرس عمومی، سریال و کد تصویری و کارت '
+                                'درونی کلمات بازیابی؛ مبلغ اولیه از پیش واریزشده.',
+                 'brand': {'@type': 'Brand', 'name': 'بیت‌پستا'},
+                 'url': 'https://bitposta.com/',
+                 'isRelatedTo': {'@type': 'WebPage', '@id': canonical,
+                                 'name': page_title},
+                 'additionalType': 'https://schema.org/FinancialProduct'},
+            ]
+        return {'canonical_url': canonical, 'seo_structured_data': structured}
 
     @app.before_request
     def validate_api_serial():

@@ -65,7 +65,7 @@ class UIContract(unittest.TestCase):
                 else:
                     self.assertEqual(attrs.get("rel"), "canonical")
                     self.assertTrue(attrs.get("href", "").startswith("https://bitposta.com/"))
-            if tag == "script":
+            if tag == "script" and attrs.get("type") != "application/ld+json":
                 self.assertEqual(attrs.get("src"), "/static/site.js")
                 self.assertIn("defer", attrs)
         css_path = ROOT / "static/site.css"
@@ -76,8 +76,14 @@ class UIContract(unittest.TestCase):
         self.assertIn("@media", css)
         self.assertIn(":focus-visible", css)
         self.assertNotRegex(css, r"https?://|@import")
-        for script in re.findall(r"<script[^>]*>(.*?)</script>", source, re.S):
-            self.assertFalse(script.strip(), "Scripts must be external for strict CSP")
+        # A <script> with a type is an inert data block (JSON-LD), not executable
+        # code, so CSP script-src never applies to it. Everything else must be
+        # external and empty.
+        for opening, body in re.findall(r"(<script[^>]*>)(.*?)</script>", source, re.S):
+            if 'type="application/ld+json"' in opening:
+                self.assertTrue(body.strip(), "A JSON-LD block must carry data")
+                continue
+            self.assertFalse(body.strip(), "Scripts must be external for strict CSP")
 
     def test_header_prominently_links_to_short_terms_route(self):
         for template in ("index.html", "terms.html", "contact.html"):
@@ -930,8 +936,11 @@ assert.equal(ids['lookup-status'].dataset.state,'error');
                     if tag == "a" and attrs.get("href", "").startswith("https://"):
                         self.assertEqual(attrs.get("target"), "_blank")
                         self.assertEqual(attrs.get("rel"), "noopener noreferrer")
-                for script in re.findall(r"<script[^>]*>(.*?)</script>", source, re.S):
-                    self.assertFalse(script.strip())
+                for opening, body in re.findall(r"(<script[^>]*>)(.*?)</script>", source, re.S):
+                    if 'type="application/ld+json"' in opening:
+                        self.assertTrue(body.strip())
+                        continue
+                    self.assertFalse(body.strip())
         css = (ROOT / "static/site.css").read_text()
         self.assertRegex(css, r'\[hidden\]\s*\{\s*display\s*:\s*none\s*!important\s*;?\s*\}',
                          "Author display rules must not expose hidden results or failed QR images")

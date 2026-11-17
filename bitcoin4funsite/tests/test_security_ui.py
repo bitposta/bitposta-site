@@ -24,7 +24,8 @@ class SecurityUI(unittest.TestCase):
     def test_questionnaire_is_accessible_local_and_validates_before_scoring(self):
         source = self.render()
         doc = Document(source)
-        scripts = [a['src'] for t, a in doc.elements if t == 'script']
+        scripts = [a['src'] for t, a in doc.elements
+                   if t == 'script' and a.get('type') != 'application/ld+json']
         self.assertIn('/static/security.js', scripts)
         self.assertNotIn('/static/security.js', Environment(
             loader=FileSystemLoader(ROOT / 'templates')).get_template('index.html').render())
@@ -246,6 +247,8 @@ vm.runInThisContext(fs.readFileSync(process.argv[1], 'utf8'));
             self.assertFalse(any(k.startswith('on') for k in attrs))
             self.assertNotIn('style', attrs)
             if tag in ('script', 'img', 'link', 'iframe'):
+                if tag == 'script' and attrs.get('type') == 'application/ld+json':
+                    continue  # inert data block, not a fetched asset
                 url = attrs.get('src', attrs.get('href', ''))
                 self.assertTrue(url.startswith('/static/'), url)
         self.assertNotIn('<script>', source)
