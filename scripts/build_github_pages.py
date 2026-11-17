@@ -66,6 +66,23 @@ PAGES = (
     ("/download", "download.html", Path("download/index.html"), "https://bitposta.com/download"),
 )
 DYNAMIC_ROUTE_PREFIXES = ("/costs", "/contact", "/lookup", "/api", "/aml")
+
+# The mirror is noindex, but an empty JSON-LD block is still wrong markup. Keep
+# this in step with app.py's seo_context: same fixed origin, same node shape.
+STRUCTURED_DATA = (
+    {"@context": "https://schema.org", "@type": "WebSite",
+     "name": "بیت‌پستا", "alternateName": "bitposta",
+     "url": "https://bitposta.com/", "inLanguage": "fa-IR",
+     "description": "کیف پول کاغذی بیت‌کوین (پیپروالت) و راهنمای فارسی خرید بیت‌کوین کاغذی."},
+    {"@context": "https://schema.org", "@type": "Product",
+     "name": "کیف پول کاغذی بیت‌کوین (پیپروالت)",
+     "alternateName": ["بیت‌کوین کاغذی", "پیپروالت", "paper wallet"],
+     "description": "پاکت کاغذی با پاکت بیرونی آدرس عمومی، سریال و کد تصویری و کارت "
+                    "درونی کلمات بازیابی؛ مبلغ اولیه از پیش واریزشده.",
+     "brand": {"@type": "Brand", "name": "بیت‌پستا"},
+     "url": "https://bitposta.com/",
+     "additionalType": "https://schema.org/FinancialProduct"},
+)
 LOCAL_ATTRIBUTE = re.compile(
     r"(?P<prefix>\b(?:href|src|action)\s*=\s*)(?P<quote>[\"'])(?P<url>/[^\"']*)(?P=quote)",
     re.IGNORECASE,
@@ -132,7 +149,8 @@ def build(output: Path) -> None:
     for _route, template_name, relative_output, canonical in PAGES:
         target = output / relative_output
         target.parent.mkdir(parents=True, exist_ok=True)
-        rendered = environment.get_template(template_name).render(canonical_url=canonical)
+        rendered = environment.get_template(template_name).render(
+            canonical_url=canonical, seo_structured_data=list(STRUCTURED_DATA))
         # Crawlers must be allowed to fetch the page to observe this directive.
         rendered = rendered.replace(
             "</head>", '<meta name="robots" content="noindex,follow">\n</head>', 1
