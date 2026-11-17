@@ -39,7 +39,7 @@ class LookupAdmissionFlow(unittest.TestCase):
             client = app.test_client()
             for index, serial in enumerate(SERIALS):
                 response = client.get(aliases(serial)[index], base_url=(
-                    'https://btc4.fun' if index % 2 else 'https://go.btc4.fun'))
+                    'https://bitposta.com' if index % 2 else 'https://go.bitposta.com'))
                 self.assertEqual(response.status_code, 200)
                 if index < 3:
                     self.assertIn('data-initial-state="found"', response.text)
@@ -49,7 +49,7 @@ class LookupAdmissionFlow(unittest.TestCase):
             self.assertEqual(lookup.call_count, 10)
             now[0] = 1017
             for path in aliases('TEST-DO-NOT-FUND-0587k45302'):
-                response = client.get(path, base_url='https://go.btc4.fun')
+                response = client.get(path, base_url='https://go.bitposta.com')
                 self.assertEqual(response.status_code, 429)
                 self.assertEqual(response.headers['Retry-After'], '43')
                 if not path.startswith('/api/'):

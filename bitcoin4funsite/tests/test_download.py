@@ -11,8 +11,8 @@ class DownloadPage(unittest.TestCase):
         c = create_app({'TESTING': True}).test_client()
         response = c.get('/download')
         self.assertEqual(response.status_code, 200)
-        for phrase in ('btc4fun', 'گیت‌هاب', 'Assets', 'btc4fun-release.apk', 'SHA256SUMS',
-                       'https://github.com/btc4-fun/btc-tag-checker/releases/latest'):
+        for phrase in ('bitposta', 'گیت‌هاب', 'Assets', 'bitposta-release.apk', 'SHA256SUMS',
+                       'https://github.com/bitposta/bitposta-checker/releases/latest'):
             self.assertIn(phrase, response.text)
         self.assertIn('href="/download"', c.get('/').text)
         self.assertNotIn('/actions/workflows/', response.text)

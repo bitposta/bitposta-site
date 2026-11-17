@@ -59,11 +59,11 @@ TEMPLATE_SOURCE_ALLOWLIST = tuple(
 # This is the complete HTML publication allowlist. Server-backed routes are not
 # rendered and the authoritative canonical origin stays on the Flask site.
 PAGES = (
-    ("/", "index.html", Path("index.html"), "https://btc4.fun/"),
-    ("/guide", "guide.html", Path("guide/index.html"), "https://btc4.fun/guide"),
-    ("/security", "security.html", Path("security/index.html"), "https://btc4.fun/security"),
-    ("/terms", "terms.html", Path("terms/index.html"), "https://btc4.fun/terms"),
-    ("/download", "download.html", Path("download/index.html"), "https://btc4.fun/download"),
+    ("/", "index.html", Path("index.html"), "https://bitposta.com/"),
+    ("/guide", "guide.html", Path("guide/index.html"), "https://bitposta.com/guide"),
+    ("/security", "security.html", Path("security/index.html"), "https://bitposta.com/security"),
+    ("/terms", "terms.html", Path("terms/index.html"), "https://bitposta.com/terms"),
+    ("/download", "download.html", Path("download/index.html"), "https://bitposta.com/download"),
 )
 DYNAMIC_ROUTE_PREFIXES = ("/costs", "/contact", "/lookup", "/api", "/aml")
 LOCAL_ATTRIBUTE = re.compile(
@@ -77,7 +77,7 @@ def rewrite_links(source: str) -> str:
         reference = match.group("url")
         path = reference.split("#", 1)[0].split("?", 1)[0]
         if any(path == prefix or path.startswith(prefix + "/") for prefix in DYNAMIC_ROUTE_PREFIXES):
-            reference = "https://btc4.fun" + reference
+            reference = "https://bitposta.com" + reference
         elif path == "/t":
             reference = "/terms" + reference[len(path):]
         return match.group("prefix") + match.group("quote") + reference + match.group("quote")
@@ -168,7 +168,7 @@ def build(output: Path) -> None:
     }
     manifest = {
         "schema_version": 1,
-        "canonical_origin": "https://btc4.fun",
+        "canonical_origin": "https://bitposta.com",
         "pages": [
             {
                 "route": route,

@@ -20,14 +20,14 @@ BALANCE = {'address': ADDRESS, 'confirmed_sats': 1234, 'pending_delta_sats': 0,
 FULL_PUBLIC = {
     'public_notes': 'پاکت آزمایشی؛ هیچ ارزشی ندارد.',
     'site_key': 'btc4.fun',
-    'site_url': 'https://btc4.fun/',
-    'image_url': 'https://btc4.fun/static/logo.png',
+    'site_url': 'https://bitposta.com/',
+    'image_url': 'https://bitposta.com/static/logo.png',
 }
 # Public key/value links: the site's own allowlisted host only.
 LINKS = {
-    'instagram': 'https://btc4.fun/instagram',
-    'telegram': 'https://btc4.fun/telegram',
-    'youtube': 'https://btc4.fun/youtube',
+    'instagram': 'https://bitposta.com/instagram',
+    'telegram': 'https://bitposta.com/telegram',
+    'youtube': 'https://bitposta.com/youtube',
 }
 
 
@@ -64,7 +64,7 @@ class PublicMetadataApi(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(set(response.json), {'address', 'serial', 'lookup_url'})
         self.assertEqual(response.json, {'address': ADDRESS, 'serial': SERIAL,
-                                         'lookup_url': 'https://btc4.fun/s/' + SERIAL})
+                                         'lookup_url': 'https://bitposta.com/s/' + SERIAL})
 
     def test_address_balance_flag_adds_balance_and_optional_public(self):
         client = self.build(dict(address=ADDRESS, serial=SERIAL, **FULL_PUBLIC))
@@ -74,8 +74,8 @@ class PublicMetadataApi(unittest.TestCase):
         self.assertEqual(response.json['balance'], BALANCE)
         self.assertEqual(response.json['public'], {
             'notes': FULL_PUBLIC['public_notes'],
-            'site': {'key': 'btc4.fun', 'url': 'https://btc4.fun/'},
-            'image_url': 'https://btc4.fun/static/logo.png',
+            'site': {'key': 'btc4.fun', 'url': 'https://bitposta.com/'},
+            'image_url': 'https://bitposta.com/static/logo.png',
         })
 
     def test_address_balance_flag_without_public_fields_omits_public(self):
@@ -142,7 +142,7 @@ class PublicMetadataApi(unittest.TestCase):
         response = client.get(PATH + '?balance=1')
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json, {'address': ADDRESS, 'serial': SERIAL,
-                                         'lookup_url': 'https://btc4.fun/s/' + SERIAL,
+                                         'lookup_url': 'https://bitposta.com/s/' + SERIAL,
                                          'error': 'balance_unavailable'})
         self.assertNotIn('SYNTHETIC_PRIVATE', response.text)
 
@@ -197,7 +197,7 @@ class PublicMetadataApi(unittest.TestCase):
     def test_image_csp_matches_existing_project_host_allowlist(self):
         response = self.build(dict(address=ADDRESS, serial=SERIAL, **FULL_PUBLIC)).get('/s/' + SERIAL)
         directives = dict(part.strip().split(' ', 1) for part in response.headers['Content-Security-Policy'].split(';') if ' ' in part.strip())
-        self.assertEqual(set(directives['img-src'].split()), {"'self'", 'https://btc4.fun', 'https://btc.saeb.id.ir', 'https://b.tc4fun.ir'})
+        self.assertEqual(set(directives['img-src'].split()), {"'self'", 'https://bitposta.com', 'https://btc.saeb.id.ir', 'https://bitposta.com'})
         self.assertNotIn('onerror=', response.text)
 
     def test_unicode_notes_and_labels_follow_codepoint_boundaries(self):
@@ -228,8 +228,8 @@ class PublicMetadataApi(unittest.TestCase):
 
     def test_site_requires_both_key_and_url(self):
         for record in ({'site_key': 'btc4.fun'},
-                       {'site_url': 'https://btc4.fun/'},
-                       {'site_key': 'bad key!', 'site_url': 'https://btc4.fun/'}):
+                       {'site_url': 'https://bitposta.com/'},
+                       {'site_key': 'bad key!', 'site_url': 'https://bitposta.com/'}):
             with self.subTest(record=record):
                 client = self.build(dict(address=ADDRESS, serial=SERIAL, **record))
                 response = client.get(SERIAL_PATH + '?balance=1')
@@ -245,10 +245,10 @@ class PublicMetadataApi(unittest.TestCase):
         self.assertIn('یادداشت عمومی', html)
         self.assertIn(FULL_PUBLIC['public_notes'], html)
         self.assertIn('سایت', html)
-        self.assertIn('href="https://btc4.fun/"', html)
+        self.assertIn('href="https://bitposta.com/"', html)
         self.assertIn('rel="noopener noreferrer"', html)
         self.assertIn('تصویر', html)
-        self.assertIn('src="https://btc4.fun/static/logo.png"', html)
+        self.assertIn('src="https://bitposta.com/static/logo.png"', html)
         self.assertIn('alt=""', html)
         self.assertIn('width="320"', html)
         self.assertIn('height="180"', html)
@@ -282,16 +282,16 @@ class PublicMetadataApi(unittest.TestCase):
     def test_unsafe_links_are_dropped_one_by_one(self):
         # Any https host is allowed; only unsafe or malformed values are dropped.
         record = {'address': ADDRESS, 'serial': SERIAL, 'public_links': json.dumps({
-            'instagram': 'https://btc4.fun/instagram',
+            'instagram': 'https://bitposta.com/instagram',
             'userinfo': 'https://user:pw@btc4.fun/x',
             'http': 'http://btc4.fun/x',
             'javascript': 'javascript:alert(1)',
-            'bidi': 'https://btc4.fun/a\u202eb',
+            'bidi': 'https://bitposta.com/a\u202eb',
         })}
         client = self.build(record)
         response = client.get(SERIAL_PATH + '?balance=1')
         self.assertEqual(response.json['public'], {'notes': None,
-                                                   'links': {'instagram': 'https://btc4.fun/instagram'}})
+                                                   'links': {'instagram': 'https://bitposta.com/instagram'}})
         for dropped in ('user:pw@', 'javascript:', 'bidi'):
             with self.subTest(dropped=dropped):
                 self.assertNotIn(dropped, response.text)
@@ -299,8 +299,8 @@ class PublicMetadataApi(unittest.TestCase):
     def test_persian_labels_and_contact_routes_are_published(self):
         # The owner's real config uses Persian labels plus mailto: and https.
         # A link keeps the https host allowlist, so off-allowlist hosts are dropped.
-        links = {'اینستاگرام': 'https://b.tc4fun.ir/instagram',
-                 'ایمیل': 'mailto:09113458375@btc4.fun',
+        links = {'اینستاگرام': 'https://bitposta.com/instagram',
+                 'ایمیل': 'mailto:09113458375@bitposta.com',
                  'سایت': 'https://btc.saeb.id.ir'}
         client = self.build({'address': ADDRESS, 'serial': SERIAL, 'public_links': json.dumps(links)})
         response = client.get(SERIAL_PATH + '?balance=1')
@@ -308,7 +308,7 @@ class PublicMetadataApi(unittest.TestCase):
         self.assertEqual(response.json['public']['links'], links)
         html = client.get('/s/' + SERIAL).text
         self.assertIn('ایمیل', html)
-        self.assertIn('href="mailto:09113458375@btc4.fun"', html)
+        self.assertIn('href="mailto:09113458375@bitposta.com"', html)
 
     def test_links_with_no_valid_entry_omit_public(self):
         client = self.build({'address': ADDRESS, 'serial': SERIAL,
@@ -346,10 +346,10 @@ class PublicPayloadUnit(unittest.TestCase):
         self.assertIsNone(module.public_payload({'public_notes': 'x' * 501}))
         self.assertEqual(
             module.public_payload({'public_notes': 'n', 'site_key': 'b.tc4fun.ir',
-                                   'site_url': 'https://b.tc4fun.ir/path'}),
-            {'notes': 'n', 'site': {'key': 'b.tc4fun.ir', 'url': 'https://b.tc4fun.ir/path'}})
-        for bad in ('https://btc4.fun:8443/', 'https://user@btc4.fun/', 'https://evil.invalid/',
-                    'http://btc4.fun/', 'javascript:alert(1)', 'https://btc4.fun/ x'):
+                                   'site_url': 'https://bitposta.com/path'}),
+            {'notes': 'n', 'site': {'key': 'b.tc4fun.ir', 'url': 'https://bitposta.com/path'}})
+        for bad in ('https://bitposta.com:8443/', 'https://user@btc4.fun/', 'https://evil.invalid/',
+                    'http://btc4.fun/', 'javascript:alert(1)', 'https://bitposta.com/ x'):
             with self.subTest(bad=bad):
                 self.assertIsNone(module.public_payload({'image_url': bad}))
 

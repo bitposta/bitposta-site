@@ -69,7 +69,7 @@ class ContactForm(unittest.TestCase):
                          csrf_token=token, captcha_answer=answer)
 
     def post(self, form, **kwargs):
-        return self.client.post('/contact', data=form, headers={'Origin': 'https://btc4.fun'}, **kwargs)
+        return self.client.post('/contact', data=form, headers={'Origin': 'https://bitposta.com'}, **kwargs)
 
     def test_real_form_question_and_three_digit_scripts_without_js(self):
         for digits in ('0123456789', '۰۱۲۳۴۵۶۷۸۹', '٠١٢٣٤٥٦٧٨٩'):

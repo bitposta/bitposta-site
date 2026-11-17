@@ -44,12 +44,12 @@ class UIContract(unittest.TestCase):
         self.assertIn("بیت‌کوین،", source)
         self.assertIn("در یک پاکت", source)
         self.assertIn("کلمات بازیابی", source)
-        self.assertIn("btc4fun", source)
-        self.assertIn("btc4.fun", source)
-        self.assertIn("09113458375@btc4.fun", source)
-        self.assertIn("https://github.com/btc4-fun/btc-envelope-maker", source)
+        self.assertIn("بیت‌پستا", source)
+        self.assertIn("bitposta.com", source)
+        self.assertIn("09113458375@bitposta.com", source)
+        self.assertIn("https://github.com/bitposta/bitposta-site", source)
         self.assertNotIn("bitcoin4fun", source)
-        self.assertNotIn("bitcoin4.fun", source)
+        self.assertNotIn("btc4.fun", source)
         self.assertNotIn("/api/market", source)
         self.assertNotIn("calculator.js", source)
         for tag, attrs in document.elements:
@@ -64,7 +64,7 @@ class UIContract(unittest.TestCase):
                     self.assertEqual(attrs.get("href"), "/static/favicon.png")
                 else:
                     self.assertEqual(attrs.get("rel"), "canonical")
-                    self.assertTrue(attrs.get("href", "").startswith("https://btc4.fun/"))
+                    self.assertTrue(attrs.get("href", "").startswith("https://bitposta.com/"))
             if tag == "script":
                 self.assertEqual(attrs.get("src"), "/static/site.js")
                 self.assertIn("defer", attrs)
@@ -162,8 +162,8 @@ class UIContract(unittest.TestCase):
             self.assertTrue(attrs.get('width') and attrs.get('height'))
         self.assertNotIn('/static/privatekey.png', source)
         self.assertNotIn('/static/publickey.png', source)
-        self.assertIn('https://btc4.fun/s/SERIAL', intro)
-        self.assertIn('https://go.btc4.fun/SERIAL', intro)
+        self.assertIn('https://bitposta.com/s/SERIAL', intro)
+        self.assertIn('https://go.bitposta.com/SERIAL', intro)
         self.assertIn('نمونهٔ آموزشی', intro)
 
     def test_guide_explains_seal_limits_without_license_detail(self):
@@ -494,15 +494,15 @@ vm.runInThisContext(fs.readFileSync(process.argv[1], 'utf8'));
     def test_initial_public_hydrates_safely_without_network(self):
         import json
         data = json.dumps({'notes': 'safe <script> & text',
-                           'site': {'key': 'btc4.fun', 'url': 'https://btc4.fun/'},
-                           'image_url': 'https://b.tc4fun.ir/example.png',
+                           'site': {'key': 'bitposta.com', 'url': 'https://bitposta.com/'},
+                           'image_url': 'https://bitposta.com/example.png',
                            'links': {'web': 'https://example.invalid/profile',
                                      'mail': 'mailto:test@example.invalid',
                                      'phone': 'tel:+123456789', 'bad': 'javascript:alert(1)'}})
         self.run_lookup_script(r'''
 await tick();assert.equal(requests.length,0);
 assert.ok(all().some(n=>n.textContent==='safe <script> & text'));
-assert.ok(all().some(n=>n.src==='https://b.tc4fun.ir/example.png'));
+assert.ok(all().some(n=>n.src==='https://bitposta.com/example.png'));
 const links=all().filter(n=>n.tagName==='a');
 assert.ok(links.some(n=>n.href==='https://example.invalid/profile' && n.target==='_blank' && n.rel==='noopener noreferrer'));
 assert.ok(links.some(n=>n.href==='mailto:test@example.invalid' && !n.target));
@@ -541,7 +541,7 @@ assert.equal(all().some(n=>n.href==='https://example.invalid/profile'), {str(siz
 const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 const serial='Serial_710587k45300';
 handler=async()=>({ok:true,status:200,json:async()=>({address,serial,
-  lookup_url:'https://btc4.fun/s/'+serial,
+  lookup_url:'https://bitposta.com/s/'+serial,
   balance:{address,confirmed_sats:500,pending_delta_sats:-50,source:'https://blockstream.info/api',fetched_at:'1970-01-01T00:16:40+00:00'}})});
 await submitAddress(address);
 assert.equal(requests.length,1);
@@ -594,7 +594,7 @@ assert.equal(requests.length,1,'No retry and no extra balance request');
 const address='bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 const serial='Serial_710587k45300';
 handler=async()=>({ok:true,status:200,json:async()=>({address,serial,
-  lookup_url:'https://btc4.fun/s/'+serial,
+  lookup_url:'https://bitposta.com/s/'+serial,
   balance:{address,confirmed_sats:500,pending_delta_sats:-50,source:'https://blockstream.info/api',fetched_at:'1970-01-01T00:16:40+00:00'}})});
 await submitAddress(address);
 const nodes=all();

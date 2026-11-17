@@ -66,8 +66,8 @@ class ApplicationContract(unittest.TestCase):
         lookup = Mock(return_value={'serial': serial, 'address': address, 'notes': 'PRIVATE_SENTINEL'})
         app = self.module.create_app({'TESTING': True, 'WALLET_LOOKUP': lookup})
         pages = []
-        for base_url, path in (('https://btc4.fun', '/s/' + serial),
-                               ('https://go.btc4.fun', '/' + serial)):
+        for base_url, path in (('https://bitposta.com', '/s/' + serial),
+                               ('https://go.bitposta.com', '/' + serial)):
             response = app.test_client().get(path, base_url=base_url)
             self.assertEqual(response.status_code, 200)
             self.assertIn(address, response.text)
@@ -221,7 +221,7 @@ class ApplicationContract(unittest.TestCase):
         client = app.test_client()
         robots = client.get('/robots.txt')
         self.assertEqual(robots.status_code, 200)
-        self.assertIn('Sitemap: https://btc4.fun/sitemap.xml', robots.text)
+        self.assertIn('Sitemap: https://bitposta.com/sitemap.xml', robots.text)
         self.assertIn('Disallow: /api/', robots.text)
         self.assertIn('Disallow: /lookup', robots.text)
         self.assertNotIn('Disallow: /costs', robots.text)
@@ -229,9 +229,9 @@ class ApplicationContract(unittest.TestCase):
         sitemap = client.get('/sitemap.xml')
         self.assertEqual(sitemap.status_code, 200)
         for public_page in ('/guide', '/security', '/terms', '/download', '/costs'):
-            self.assertIn('https://btc4.fun' + public_page, sitemap.text)
+            self.assertIn('https://bitposta.com' + public_page, sitemap.text)
         for private_or_operational in ('/lookup', '/contact', '/api/'):
-            self.assertNotIn('https://btc4.fun' + private_or_operational, sitemap.text)
+            self.assertNotIn('https://bitposta.com' + private_or_operational, sitemap.text)
 
     def test_contact_is_crawlable_for_noindex_while_costs_is_indexable(self):
         client = self.module.create_app({'TESTING': True}).test_client()
@@ -239,19 +239,19 @@ class ApplicationContract(unittest.TestCase):
         self.assertEqual(contact.headers.get('X-Robots-Tag'), 'noindex, nofollow, noarchive')
         costs = client.get('/costs')
         self.assertIsNone(costs.headers.get('X-Robots-Tag'))
-        self.assertIn('<link rel="canonical" href="https://btc4.fun/costs">', costs.text)
+        self.assertIn('<link rel="canonical" href="https://bitposta.com/costs">', costs.text)
 
     def test_canonical_is_fixed_to_safe_informational_allowlist(self):
         app = self.module.create_app({'TESTING': True})
         client = app.test_client()
         for path, canonical in {
-            '/': 'https://btc4.fun/',
-            '/guide': 'https://btc4.fun/guide',
-            '/security': 'https://btc4.fun/security',
-            '/terms': 'https://btc4.fun/terms',
-            '/t': 'https://btc4.fun/terms',
-            '/download': 'https://btc4.fun/download',
-            '/costs': 'https://btc4.fun/costs',
+            '/': 'https://bitposta.com/',
+            '/guide': 'https://bitposta.com/guide',
+            '/security': 'https://bitposta.com/security',
+            '/terms': 'https://bitposta.com/terms',
+            '/t': 'https://bitposta.com/terms',
+            '/download': 'https://bitposta.com/download',
+            '/costs': 'https://bitposta.com/costs',
         }.items():
             with self.subTest(path=path):
                 response = client.get(path, base_url='https://evil.example')
@@ -364,16 +364,16 @@ class ApplicationContract(unittest.TestCase):
         service = Mock()
         app = self.module.create_app({'TESTING': True, 'TRUSTED_PROXIES': '127.0.0.1/32', 'CONTACT_SERVICE': service})
         client = app.test_client()
-        client.post('/contact', data={'message': 'Public test'}, headers={'Origin': 'https://btc4.fun', 'X-Forwarded-For': '198.51.100.66, 203.0.113.4'})
+        client.post('/contact', data={'message': 'Public test'}, headers={'Origin': 'https://bitposta.com', 'X-Forwarded-For': '198.51.100.66, 203.0.113.4'})
         self.assertEqual(service.submit.call_args.args[1], '203.0.113.4')
         service.reset_mock()
-        client.post('/contact', data={'message': 'Public test'}, headers={'Origin': 'https://btc4.fun', 'X-Forwarded-For': '198.51.100.66'}, environ_overrides={'REMOTE_ADDR': '8.8.8.8'})
+        client.post('/contact', data={'message': 'Public test'}, headers={'Origin': 'https://bitposta.com', 'X-Forwarded-For': '198.51.100.66'}, environ_overrides={'REMOTE_ADDR': '8.8.8.8'})
         self.assertEqual(service.submit.call_args.args[1], '8.8.8.8')
 
     def test_contact_normalizes_native_textarea_newlines_before_validation(self):
         service = Mock()
         app = self.module.create_app({'TESTING': True, 'CONTACT_SERVICE': service})
-        response = app.test_client().post('/contact', data={'name': 'TEST', 'mobile': '', 'message': 'Line one\r\nLine two', 'csrf_token': 'SYNTHETIC', 'website': ''}, headers={'Origin': 'https://btc4.fun'})
+        response = app.test_client().post('/contact', data={'name': 'TEST', 'mobile': '', 'message': 'Line one\r\nLine two', 'csrf_token': 'SYNTHETIC', 'website': ''}, headers={'Origin': 'https://bitposta.com'})
         self.assertEqual(response.status_code, 303)
         self.assertEqual(service.submit.call_args.args[0]['message'], 'Line one\nLine two')
 
@@ -389,7 +389,7 @@ class ApplicationContract(unittest.TestCase):
         app = self.module.create_app({'TESTING': True, 'TRUSTED_PROXIES': '127.0.0.1/32', 'CONTACT_SERVICE': service})
         client = app.test_client()
         form = {'name': 'TEST-DO-NOT-FUND', 'mobile': '', 'message': 'Public test only', 'csrf_token': 'SYNTHETIC_FORM_TOKEN', 'website': ''}
-        response = client.post('/contact', data=form, headers={'Origin': 'https://btc4.fun', 'X-Forwarded-For': '198.51.100.23'})
+        response = client.post('/contact', data=form, headers={'Origin': 'https://bitposta.com', 'X-Forwarded-For': '198.51.100.23'})
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers['Location'], '/contact?sent=1')
         service.submit.assert_called_once()
@@ -410,8 +410,8 @@ class ApplicationContract(unittest.TestCase):
         app = self.module.create_app({'TESTING': True, 'CONTACT_SERVICE': service})
         client = app.test_client()
         self.assertEqual(client.post('/contact', data={'message': 'x'}, headers={'Origin': 'https://evil.invalid'}).status_code, 403)
-        self.assertEqual(client.post('/contact', json={'message': 'x'}, headers={'Origin': 'https://btc4.fun'}).status_code, 415)
-        self.assertEqual(client.post('/contact', data={'message': 'x' * 20000}, headers={'Origin': 'https://btc4.fun'}).status_code, 413)
+        self.assertEqual(client.post('/contact', json={'message': 'x'}, headers={'Origin': 'https://bitposta.com'}).status_code, 415)
+        self.assertEqual(client.post('/contact', data={'message': 'x' * 20000}, headers={'Origin': 'https://bitposta.com'}).status_code, 413)
         service.submit.assert_not_called()
 
 

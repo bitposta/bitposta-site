@@ -37,7 +37,7 @@ SERIAL_PATTERN = (
 SERIAL_RE = re.compile(SERIAL_PATTERN)
 
 # Allowed hosts for the optional public site/image URLs (must mirror the generator).
-PUBLIC_URL_HOSTS = frozenset({'btc4.fun', 'btc.saeb.id.ir', 'b.tc4fun.ir'})
+PUBLIC_URL_HOSTS = frozenset({'bitposta.com', 'btc.saeb.id.ir'})
 SITE_KEY_RE = re.compile(r'[A-Za-z0-9._-]{1,64}')
 _URL_RE = re.compile(r'https://[^\s/]+(?:/[^\s]*)?')
 # Control/format characters: same admission rule as contact text, plus bidi marks.
@@ -253,14 +253,14 @@ def create_app(config=None):
         # Canonicals are fixed to the public informational allowlist. Never
         # derive this URL from Host or another request-controlled value.
         canonical_paths = {
-            '/': 'https://btc4.fun/',
-            '/guide': 'https://btc4.fun/guide',
-            '/security': 'https://btc4.fun/security',
-            '/terms': 'https://btc4.fun/terms',
-            '/t': 'https://btc4.fun/terms',
-            '/download': 'https://btc4.fun/download',
-            '/costs': 'https://btc4.fun/costs',
-            '/aml': 'https://btc4.fun/aml',
+            '/': 'https://bitposta.com/',
+            '/guide': 'https://bitposta.com/guide',
+            '/security': 'https://bitposta.com/security',
+            '/terms': 'https://bitposta.com/terms',
+            '/t': 'https://bitposta.com/terms',
+            '/download': 'https://bitposta.com/download',
+            '/costs': 'https://bitposta.com/costs',
+            '/aml': 'https://bitposta.com/aml',
         }
         return {'canonical_url': canonical_paths.get(request.path)}
 
@@ -308,7 +308,7 @@ def create_app(config=None):
     def security_headers(response):
         response.headers['Content-Security-Policy'] = (
             "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; "
-            "img-src 'self' https://btc4.fun https://btc.saeb.id.ir https://b.tc4fun.ir; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+            "img-src 'self' https://bitposta.com https://btc.saeb.id.ir; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
             "form-action 'self'; object-src 'none'"
         )
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -362,12 +362,12 @@ def create_app(config=None):
 
     @app.get('/robots.txt')
     def robots():
-        return Response('User-agent: *\nAllow: /\nDisallow: /lookup\nDisallow: /s/\nDisallow: /api/\nSitemap: https://btc4.fun/sitemap.xml\n', mimetype='text/plain')
+        return Response('User-agent: *\nAllow: /\nDisallow: /lookup\nDisallow: /s/\nDisallow: /api/\nSitemap: https://bitposta.com/sitemap.xml\n', mimetype='text/plain')
 
     @app.get('/sitemap.xml')
     def sitemap():
         pages = ('/', '/guide', '/security', '/terms', '/download', '/costs', '/aml')
-        body = ''.join(f'<url><loc>https://btc4.fun{path}</loc></url>' for path in pages)
+        body = ''.join(f'<url><loc>https://bitposta.com{path}</loc></url>' for path in pages)
         return Response('<?xml version="1.0" encoding="UTF-8"?>'
                         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
                         + body + '</urlset>', mimetype='application/xml')
@@ -403,7 +403,7 @@ def create_app(config=None):
     def contact():
         if request.method == 'POST':
             origin = request.headers.get('Origin')
-            if origin not in {'https://btc4.fun', 'https://go.btc4.fun'}:
+            if origin not in {'https://bitposta.com', 'https://go.bitposta.com'}:
                 abort(403)
             if request.mimetype != 'application/x-www-form-urlencoded':
                 abort(415)
@@ -614,7 +614,7 @@ def create_app(config=None):
             serial = record['serial']
             if record['address'] != address or SERIAL_RE.fullmatch(serial) is None:
                 raise ValueError('Invalid public wallet')
-            body = dict(address=address, serial=serial, lookup_url='https://btc4.fun/s/' + serial)
+            body = dict(address=address, serial=serial, lookup_url='https://bitposta.com/s/' + serial)
             if with_balance:
                 # Same balance object as /api/wallets?balance=1.
                 service = app.config.get('SERIAL_BALANCE')

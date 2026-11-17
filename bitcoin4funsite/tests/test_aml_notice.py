@@ -42,7 +42,7 @@ class AmlNotice(unittest.TestCase):
         self.assertTrue(TEMPLATE.is_file(), 'Missing anti-money-laundering notice template')
         response = self.client.get('/aml')
         self.assertEqual(response.status_code, 200)
-        self.assertIn('<link rel="canonical" href="https://btc4.fun/aml">', response.text)
+        self.assertIn('<link rel="canonical" href="https://bitposta.com/aml">', response.text)
         self.assertIsNone(response.headers.get('X-Robots-Tag'))
 
     def test_notice_states_the_deposit_cap_and_the_purpose(self):
@@ -62,7 +62,7 @@ class AmlNotice(unittest.TestCase):
         terms = self.client.get('/terms').text
         self.assertIn('href="/aml"', terms)
         sitemap = self.client.get('/sitemap.xml').text
-        self.assertIn('https://btc4.fun/aml</loc>', sitemap)
+        self.assertIn('https://bitposta.com/aml</loc>', sitemap)
 
     def test_notice_is_not_part_of_the_github_pages_snapshot(self):
         generator = (REPOSITORY_ROOT / 'scripts' / 'build_github_pages.py').read_text(encoding='utf-8')

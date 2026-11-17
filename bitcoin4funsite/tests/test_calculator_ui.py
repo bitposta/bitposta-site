@@ -843,8 +843,8 @@ assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|eval\(/.test(source));
     def test_contact_keeps_email_and_forbids_private_material_without_uploads(self):
         source = self.render("contact.html", contact_token="synthetic-token")
         document = Document(source)
-        self.assertIn('href="mailto:09113458375@btc4.fun"', source)
-        self.assertIn('dir="ltr">09113458375@btc4.fun', source)
+        self.assertIn('href="mailto:09113458375@bitposta.com"', source)
+        self.assertIn('dir="ltr">09113458375@bitposta.com', source)
         for phrase in ("کلمات بازیابی", "کلید خصوصی", "نفرستید", "پرسش عمومی", "پشتیبانی فنی مداوم"):
             self.assertIn(phrase, source)
         self.assertFalse(any(tag == "input" and attrs.get("type") == "file"
@@ -942,7 +942,7 @@ assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|eval\(/.test(source));
                             if tag == "input" and attrs.get("name") == "csrf_token")
                 self.assertEqual(csrf["value"], "")
                 self.assertEqual(document.by_id("contact-status")["role"], "alert")
-                self.assertIn('href="mailto:09113458375@btc4.fun"', source)
+                self.assertIn('href="mailto:09113458375@bitposta.com"', source)
                 self.assertEqual(document.by_id("contact-retry")["href"], "/contact")
                 self.assertIn("بارگیری دوبارهٔ فرم", source)
         active = Document(self.render("contact.html", contact_token="synthetic-token"))
@@ -958,8 +958,8 @@ assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|eval\(/.test(source));
     def test_contact_channels_are_opt_in_and_set_honest_response_expectations(self):
         source = self.render("contact.html", contact_token="synthetic-token")
         document = Document(source)
-        channels = {"https://t.me/b_tc4fun_ir", "https://www.instagram.com/b.tc4fun.ir/",
-                    "https://x.com/btc4_fun"}
+        channels = {"https://t.me/bitposta", "https://www.instagram.com/bitposta.ir/",
+                    "https://x.com/bitposta"}
         links = {attrs["href"]: attrs for tag, attrs in document.elements if tag == "a"}
         self.assertTrue(channels <= links.keys(), "All three social channels need opt-in links")
         for url in channels:

@@ -26,28 +26,28 @@ docs/address-serial-api.md
 
 ```text
 /home/saeb/PycharmProjects/btc_envelope_maker
-https://github.com/btc4-fun/btc-envelope-maker
+https://github.com/bitposta/bitposta-site
 ```
 
 مولد آفلاین و ابزار ورود اطلاعات عمومی:
 
 ```text
 /home/saeb/PycharmProjects/btc_wallet_generator
-https://github.com/btc4-fun/btc-wallet-generator
+https://github.com/bitposta/bitposta-generator
 ```
 
 اپ مشتری:
 
 ```text
 /home/saeb/PycharmProjects/btc_tag_checker
-https://github.com/btc4-fun/btc-tag-checker
+https://github.com/bitposta/bitposta-checker
 ```
 
 اپ فروشنده:
 
 ```text
 /home/saeb/PycharmProjects/btc_nfc_seller
-https://github.com/btc4-fun/btc-tag-mapper
+https://github.com/bitposta/bitposta-mapper
 ```
 
 مسیرهای محلی برای دستگاه فعلی‌اند؛ روی دستگاه دیگر مکان واقعی را پیدا کنید. پوشهٔ قدیمی مولد داخل این مخزن فقط برای حفظ فایل‌های محلی باقی مانده و از گیت کنار گذاشته شده است؛ مرجع توسعه نیست. آن را حذف، دوباره اضافه یا همراه سایت منتقل نکنید. پرامپت‌های محلی قدیمی نیز قرارداد جاری را جایگزین نمی‌کنند.
@@ -80,7 +80,7 @@ docker build -f bitcoin4funsite/Dockerfile -t bitcoin4fun:verification .
 هرگاه مقدار ثابتِ قابل‌مشاهده در سایت عوض شود، نسخهٔ ایستای بایگانی‌شده در مخزن زیر باید در همان کار یا پیش از پایان همان نشست بازسازی شود:
 
 ```text
-https://github.com/btc4-fun/btc4-fun.github.io
+https://github.com/bitposta/bitposta.github.io
 ```
 
 مقدار ثابت یعنی متن قالب و بخش‌های مشترک، نشانی یا پیوند عمومی، نام برند، مجوز و مهر، قلم و برگهٔ ظاهر، تصویر و نشان، شمارهٔ نسخه یا پیوند دانلود، و هر چیزی که مولد در فهرست سفید دارایی‌اش می‌آورد. مقدار پویا یعنی هر داده‌ای که مولد در فهرست سفید نمی‌آورد، مانند نرخ بازار، آمار و پاسخ سرویس‌ها؛ این‌ها قاعده‌ای نمی‌طلبند.
@@ -96,7 +96,7 @@ python3 scripts/build_github_pages.py <path/to/github-pages-output>
 
 ```text
 ssh rpi
-https://btc4.fun
+https://bitposta.com
 /home/saeb/bitcoin4fun/bitcoin4funsite
 /home/saeb/bitcoin4fun/releases/
 ```

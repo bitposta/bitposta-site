@@ -133,7 +133,7 @@
   function addressWallet(body, address) {
     if (!body || typeof body !== "object" || body.address !== address ||
         typeof body.serial !== "string" || !validSerial.test(body.serial) ||
-        body.lookup_url !== "https://btc4.fun/s/" + body.serial) {
+        body.lookup_url !== "https://bitposta.com/s/" + body.serial) {
       return null;
     }
     const wallet = { serial: body.serial, address,
@@ -143,7 +143,7 @@
     return wallet;
   }
 
-  const PUBLIC_HOSTS = ["btc4.fun", "btc.saeb.id.ir", "b.tc4fun.ir"];
+  const PUBLIC_HOSTS = ["bitposta.com", "btc.saeb.id.ir"];
   const UNSAFE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/;
 
   function publicText(value, max) {

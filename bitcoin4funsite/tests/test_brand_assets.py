@@ -41,7 +41,7 @@ class BrandAssetContract(unittest.TestCase):
     def test_brand_restriction_is_recorded_in_the_license(self):
         license_text = (ROOT.parent / 'LICENSE.md').read_text(encoding='utf-8')
         notice = (ROOT.parent / 'NOTICE').read_text(encoding='utf-8')
-        for name in ('btc4fun', 'bitcoin4fun'):
+        for name in ('bitposta', 'bitcoin4fun'):
             self.assertIn(name, license_text)
         self.assertIn('prior written permission', license_text)
         self.assertIn('logo.png', notice)

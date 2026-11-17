@@ -47,7 +47,7 @@ class AddressSerialLookup(unittest.TestCase):
             })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json, {'address': ADDRESS, 'serial': SERIAL,
-                                        'lookup_url': 'https://btc4.fun/s/' + SERIAL})
+                                        'lookup_url': 'https://bitposta.com/s/' + SERIAL})
         self.assert_headers(response)
         self.assertNotIn('SYNTHETIC_PRIVATE', response.text)
         self.lookup.assert_called_once_with(ADDRESS)
@@ -60,7 +60,7 @@ class AddressSerialLookup(unittest.TestCase):
 
     def test_invalid_requests_precede_quota_database_secrets_and_providers(self):
         invalid = [ADDRESS.upper(), ADDRESS[:-1] + 'q', ' ' + ADDRESS, ADDRESS + '\n',
-                   'bitcoin:' + ADDRESS, 'https://btc4.fun/s/' + SERIAL,
+                   'bitcoin:' + ADDRESS, 'https://bitposta.com/s/' + SERIAL,
                    'tb1q' + ADDRESS[4:], 'bc1q' + 'q' * 58, 'bc1p' + 'q' * 58,
                    ADDRESS + '/qr.svg', "x' OR 1=1--", 'bc1q' + 'q' * 10000]
         paths = ['/api/addresses/' + quote(value, safe='') for value in invalid]
@@ -135,7 +135,7 @@ class AddressSerialLookup(unittest.TestCase):
             response = self.client.get(PATH)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json, {'address': ADDRESS, 'serial': SERIAL,
-                                        'lookup_url': 'https://btc4.fun/s/' + SERIAL})
+                                        'lookup_url': 'https://bitposta.com/s/' + SERIAL})
         cursor.execute.assert_called_once_with(
             'SELECT serial, address, public_notes, site_key, site_url, image_url, '
             'public_links FROM public.wallets WHERE address = %s LIMIT 1', (ADDRESS,))

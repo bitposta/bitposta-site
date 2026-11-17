@@ -17,14 +17,14 @@ class PublicBrandingContract(unittest.TestCase):
         service = Mock()
         service.token.return_value = 'SYNTHETIC_FORM_TOKEN'
         app = module.create_app({'TESTING': True, 'WALLET_LOOKUP': lambda serial: None, 'CONTACT_SERVICE': service})
-        for host in ('https://btc4.fun', 'https://go.btc4.fun'):
+        for host in ('https://bitposta.com', 'https://go.bitposta.com'):
             for route in ('/', '/guide', '/terms', '/t', '/costs', '/contact', '/lookup'):
                 with self.subTest(host=host, route=route):
                     response = app.test_client().get(route, base_url=host)
                     self.assertEqual(response.status_code, 200)
-                    self.assertIn('btc4.fun', response.text)
-                    self.assertIn('mailto:09113458375@btc4.fun', response.text)
-                    self.assertIn('https://github.com/btc4-fun/btc-envelope-maker', response.text)
+                    self.assertIn('bitposta.com', response.text)
+                    self.assertIn('mailto:09113458375@bitposta.com', response.text)
+                    self.assertIn('https://github.com/bitposta/bitposta-site', response.text)
 
     def test_security_page_lists_every_owned_domain_and_id_ir_verification(self):
         spec = importlib.util.spec_from_file_location('branding_app', ROOT / 'bitcoin4funsite/app.py')
@@ -32,7 +32,7 @@ class PublicBrandingContract(unittest.TestCase):
         spec.loader.exec_module(module)
         app = module.create_app({'TESTING': True, 'WALLET_LOOKUP': lambda serial: None})
         text = app.test_client().get('/security').text
-        for domain in ('btc.saeb.id.ir', 'btc4.fun', 'bitcoin4.fun', 'b.tc4fun.ir'):
+        for domain in ('btc.saeb.id.ir', 'bitposta.com'):
             with self.subTest(domain=domain):
                 self.assertIn(domain, text)
         self.assertIn('.id.ir', text)
@@ -57,9 +57,9 @@ class PublicBrandingContract(unittest.TestCase):
         self.assertEqual(response.headers['Location'], '/guide#satoshi')
 
     def test_current_public_docs_link_the_new_endpoints(self):
-        self.assertIn('https://btc4.fun', (ROOT / 'README.md').read_text())
-        self.assertIn('https://go.btc4.fun/SERIAL', (ROOT / 'bitcoin4funsite/INSTALLATION.md').read_text())
-        self.assertIn('09113458375@btc4.fun', (ROOT / 'SECURITY.md').read_text())
+        self.assertIn('https://bitposta.com', (ROOT / 'README.md').read_text())
+        self.assertIn('https://go.bitposta.com/SERIAL', (ROOT / 'bitcoin4funsite/INSTALLATION.md').read_text())
+        self.assertIn('09113458375@bitposta.com', (ROOT / 'SECURITY.md').read_text())
 
 
 if __name__ == '__main__':

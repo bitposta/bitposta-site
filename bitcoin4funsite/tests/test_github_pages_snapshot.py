@@ -65,11 +65,11 @@ class GitHubPagesSnapshotTest(unittest.TestCase):
             self.build(output)
 
             expected = {
-                Path("index.html"): "https://btc4.fun/",
-                Path("guide/index.html"): "https://btc4.fun/guide",
-                Path("security/index.html"): "https://btc4.fun/security",
-                Path("terms/index.html"): "https://btc4.fun/terms",
-                Path("download/index.html"): "https://btc4.fun/download",
+                Path("index.html"): "https://bitposta.com/",
+                Path("guide/index.html"): "https://bitposta.com/guide",
+                Path("security/index.html"): "https://bitposta.com/security",
+                Path("terms/index.html"): "https://bitposta.com/terms",
+                Path("download/index.html"): "https://bitposta.com/download",
             }
             self.assertEqual(
                 {path.relative_to(output) for path in output.rglob("*.html")},
@@ -104,7 +104,7 @@ class GitHubPagesSnapshotTest(unittest.TestCase):
                         dynamic_references.append(reference)
                         self.assertEqual(
                             (parsed.scheme, parsed.netloc),
-                            ("https", "btc4.fun"),
+                            ("https", "bitposta.com"),
                             f"{relative}: {tag}[{attribute}]={reference}",
                         )
                         continue
@@ -340,11 +340,11 @@ class GitHubPagesSnapshotTest(unittest.TestCase):
             "bitcoin4funsite/static/fonts/SOURCE.txt",
         }
         expected_pages = [
-            {"route": "/", "template": "bitcoin4funsite/templates/index.html", "output": "index.html", "canonical": "https://btc4.fun/"},
-            {"route": "/guide", "template": "bitcoin4funsite/templates/guide.html", "output": "guide/index.html", "canonical": "https://btc4.fun/guide"},
-            {"route": "/security", "template": "bitcoin4funsite/templates/security.html", "output": "security/index.html", "canonical": "https://btc4.fun/security"},
-            {"route": "/terms", "template": "bitcoin4funsite/templates/terms.html", "output": "terms/index.html", "canonical": "https://btc4.fun/terms"},
-            {"route": "/download", "template": "bitcoin4funsite/templates/download.html", "output": "download/index.html", "canonical": "https://btc4.fun/download"},
+            {"route": "/", "template": "bitcoin4funsite/templates/index.html", "output": "index.html", "canonical": "https://bitposta.com/"},
+            {"route": "/guide", "template": "bitcoin4funsite/templates/guide.html", "output": "guide/index.html", "canonical": "https://bitposta.com/guide"},
+            {"route": "/security", "template": "bitcoin4funsite/templates/security.html", "output": "security/index.html", "canonical": "https://bitposta.com/security"},
+            {"route": "/terms", "template": "bitcoin4funsite/templates/terms.html", "output": "terms/index.html", "canonical": "https://bitposta.com/terms"},
+            {"route": "/download", "template": "bitcoin4funsite/templates/download.html", "output": "download/index.html", "canonical": "https://bitposta.com/download"},
         ]
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -355,7 +355,7 @@ class GitHubPagesSnapshotTest(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
             self.assertEqual(manifest["schema_version"], 1)
-            self.assertEqual(manifest["canonical_origin"], "https://btc4.fun")
+            self.assertEqual(manifest["canonical_origin"], "https://bitposta.com")
             self.assertEqual(manifest["pages"], expected_pages)
             self.assertEqual(set(manifest["sources"]), template_sources | asset_sources)
             for relative, digest in manifest["sources"].items():
@@ -374,7 +374,7 @@ class GitHubPagesSnapshotTest(unittest.TestCase):
     def test_agrank_instruction_pins_refresh_rule(self):
         agents = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("هم‌به‌رو نگه‌داشتن نسخهٔ آموزشی گیت‌هاب پیجز", agents)
-        self.assertIn("https://github.com/btc4-fun/btc4-fun.github.io", agents)
+        self.assertIn("https://github.com/bitposta/bitposta.github.io", agents)
         self.assertIn("python3 scripts/build_github_pages.py", agents)
         self.assertIn("test_github_pages_snapshot.py", agents)
 

@@ -49,8 +49,8 @@ same-origin font, CSS, JavaScript, API and QR requests with no automatic
 third-party requests or CSP errors. Mobile viewport testing at 360px showed no
 horizontal overflow.
 
-- Public site: https://btc4.fun
-- Serial route: https://go.btc4.fun/SERIAL
+- Public site: https://bitposta.com
+- Serial route: https://go.bitposta.com/SERIAL
 - Application root: /home/saeb/bitcoin4fun/bitcoin4funsite
 - Existing database: d_bitcoin4fun, table public.wallets.
 - Dedicated web role: bitcoin4fun_web_ro, SELECT(serial,address) only.

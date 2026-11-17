@@ -21,7 +21,7 @@ class TrustedProxies(unittest.TestCase):
         with patch.dict('os.environ', {'TRUSTED_PROXIES': '192.0.2.2/32'}):
             client = create_app({'TESTING': True, 'CONTACT_SERVICE': service}).test_client()
         response = client.post('/contact', data={'message': 'synthetic'},
-            headers={'Origin': 'https://btc4.fun', 'X-Forwarded-For': '203.0.113.9'},
+            headers={'Origin': 'https://bitposta.com', 'X-Forwarded-For': '203.0.113.9'},
             environ_overrides={'REMOTE_ADDR': '192.0.2.2'})
         self.assertEqual(response.status_code, 303)
         self.assertEqual(service.submit.call_args.args[1], '203.0.113.9')
@@ -34,7 +34,7 @@ class TrustedProxies(unittest.TestCase):
         with patch.dict('os.environ', {'TRUSTED_PROXIES': ''}):
             client = create_app(config).test_client()
         response = client.post('/contact', data={'message': 'synthetic'},
-            headers={'Origin': 'https://btc4.fun', 'X-Forwarded-For': forwarded},
+            headers={'Origin': 'https://bitposta.com', 'X-Forwarded-For': forwarded},
             environ_overrides={'REMOTE_ADDR': peer})
         self.assertEqual(response.status_code, 303)
         return service.submit.call_args.args[1]

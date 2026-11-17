@@ -153,7 +153,7 @@ class LookupAddressPage(unittest.TestCase):
         plain = client.get('/api/addresses/' + ADDRESS)
         self.assertEqual(plain.status_code, 200)
         self.assertEqual(plain.json, {'address': ADDRESS, 'serial': SERIAL,
-                                      'lookup_url': 'https://btc4.fun/s/' + SERIAL})
+                                      'lookup_url': 'https://bitposta.com/s/' + SERIAL})
         service.assert_not_called()
         with_balance = client.get('/api/addresses/' + ADDRESS + '?balance=1')
         self.assertEqual(with_balance.status_code, 200)

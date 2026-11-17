@@ -3,7 +3,7 @@
 Never submit recovery words, private keys, confidential PDFs, database passwords
 or customer ledgers in public issues. Report vulnerabilities privately to:
 
-09113458375@btc4.fun
+09113458375@bitposta.com
 
 ## Website boundary
 
@@ -95,7 +95,7 @@ already accepted by the server. The tag endpoint and its audit remain separate.
 ## Historical generator security follow-up
 
 Generator implementation, verification and current operating guidance now belong
-to https://github.com/btc4-fun/btc-wallet-generator. The sections below preserve
+to https://github.com/bitposta/bitposta-generator. The sections below preserve
 pre-split findings; extraction does not resolve them. Website runtime and tests
 no longer import that repository. The website owns a pinned pure validator copy;
 see docs/address-validator-provenance.md.

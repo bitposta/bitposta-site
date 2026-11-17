@@ -17,7 +17,7 @@ contact details, or private QR payloads to this endpoint.
 ## Request
 
 ```text
-GET https://btc4.fun/api/addresses/<address>
+GET https://bitposta.com/api/addresses/<address>
 ```
 
 - Supply exactly the canonical lowercase mainnet P2WPKH address accepted by the
@@ -41,14 +41,14 @@ test wallet must not be funded:
 {
   "address": "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
   "serial": "TEST-DO-NOT-FUND-0587k45300",
-  "lookup_url": "https://btc4.fun/s/TEST-DO-NOT-FUND-0587k45300"
+  "lookup_url": "https://bitposta.com/s/TEST-DO-NOT-FUND-0587k45300"
 }
 ```
 
 The returned address must exactly match the requested address, and the stored
 serial must match the website's existing serial grammar. Otherwise the response
 is `503`, not a guessed or repaired mapping. The URL always uses the literal
-`https://btc4.fun/s/` origin and the registered serial; request `Host`, forwarded
+`https://bitposta.com/s/` origin and the registered serial; request `Host`, forwarded
 headers, and query parameters cannot replace it.
 
 | HTTP status | JSON body | Meaning |
@@ -77,13 +77,13 @@ object:
 {
   "address": "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
   "serial": "TEST-DO-NOT-FUND-0587k45300",
-  "lookup_url": "https://btc4.fun/s/TEST-DO-NOT-FUND-0587k45300",
+  "lookup_url": "https://bitposta.com/s/TEST-DO-NOT-FUND-0587k45300",
   "balance": {"address": "...", "confirmed_sats": 500, "pending_delta_sats": -50,
               "source": "https://blockstream.info/api", "fetched_at": "1970-01-01T00:16:40+00:00"},
   "public": {
     "notes": "یادداشت عمومی آزمایشی",
-    "site": {"key": "btc4.fun", "url": "https://btc4.fun/"},
-    "image_url": "https://btc4.fun/static/logo.png",
+    "site": {"key": "btc4.fun", "url": "https://bitposta.com/"},
+    "image_url": "https://bitposta.com/static/logo.png",
     "links": {"اینستاگرام": "https://instagram.com/b.tc4fun.ir",
               "تلگرام": "https://b_tc4fun_ir.t.me",
               "ایمیل": "mailto:09113458375@btc.fun"}

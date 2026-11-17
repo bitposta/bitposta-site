@@ -88,10 +88,10 @@ class PublicMeta(unittest.TestCase):
         self.assertEqual(sitemap.status_code, 200)
         for path in PUBLIC_PAGES:
             with self.subTest(path=path):
-                self.assertIn('https://btc4.fun' + path + '</loc>', sitemap.text)
+                self.assertIn('https://bitposta.com' + path + '</loc>', sitemap.text)
         for path in SERVER_DEPENDENT:
             with self.subTest(path=path):
-                self.assertNotIn('https://btc4.fun' + path, sitemap.text)
+                self.assertNotIn('https://bitposta.com' + path, sitemap.text)
 
 
 if __name__ == '__main__':
