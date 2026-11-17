@@ -71,6 +71,16 @@ summary:focus-visible{outline:3px solid var(--accent);outline-offset:4px}.quote-
 .quote-controls input{font-family:monospace;unicode-bidi:isolate}.quote-controls :is(input,select):focus-visible{outline:3px solid var(--accent);outline-offset:4px}.quote-controls input[aria-invalid=true]{border:2px solid var(--accent)}
 .quote-controls .button{justify-content:center}.quote-controls button:disabled{opacity:.6;cursor:not-allowed}.quote-result{margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
 .quote-breakdown{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-block:18px}.quote-breakdown>div{min-width:0;padding:12px;background:var(--paper);border:1px solid var(--line)}.quote-breakdown dt{font-size:.8rem;color:var(--muted)}.quote-breakdown dd{margin:8px 0 0;text-align:left}.quote-breakdown .quote-payable{border-color:var(--accent);font-weight:700}.quote-result>p{font-size:.85rem}.quote-result-warning{color:var(--accent-dark)}
+/* Two cost groups: paid once per order, versus paid for every card. Each group is
+   its own bordered card so the distinction survives scrolling on a phone. */
+.quote-group{margin-block:22px 0;padding:16px 16px 6px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface,#f4f1e9)}
+.quote-group-title{margin:0 0 4px;font-size:1rem;line-height:1.7}
+.quote-group-card{border-inline-start:4px solid var(--accent)}
+.quote-group-order{border-inline-start:4px solid var(--muted)}
+.quote-group .quote-breakdown{margin-block:12px 0;gap:10px}
+.quote-group .quote-breakdown>div{padding:10px;background:var(--paper)}
+.quote-per-card dt,.quote-per-order dt{font-weight:700;color:var(--ink)}
+.quote-quantity-summary{font-weight:700;line-height:1.9}
 @media(max-width:700px){.quote-controls{grid-template-columns:minmax(0,1fr)}.quote-breakdown{grid-template-columns:minmax(0,1fr)}.quote-controls .button{width:100%}}
 .gross-valuation{min-width:0}.gross-result{margin-top:20px;padding:18px;background:var(--soft);border-inline-start:3px solid var(--accent)}.gross-result p{margin-bottom:8px}.gross-result .numeric-block{font-size:1.05rem;overflow-wrap:anywhere;text-align:left}.quote-result-warning,#quote-result-warning{color:var(--accent-dark)}
 /* The educational questionnaire stays native, local, and keyboard accessible. */

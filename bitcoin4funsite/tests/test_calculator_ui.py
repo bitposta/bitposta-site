@@ -524,6 +524,105 @@ assert.equal(ids['quote-remainder'].textContent,'0');
 assert.equal(requests.length,1);
 ''', page="market")
 
+    def test_quantity_scales_per_card_costs_and_charges_shared_costs_once(self):
+        import sys
+        sys.path.insert(0, str(ROOT))
+        from fractions import Fraction
+        from pricing import quote_for_principal, quote_table
+
+        ceiling = lambda x: -(-x.numerator // x.denominator)
+        rates = ('10000000000', '100000', '1')
+        # The expected totals come from an independent Fraction oracle, not from
+        # the browser arithmetic the test is checking.
+        def oracle(cards):
+            sat = Fraction(rates[0]) * Fraction(101, 100) / 100000000
+            network, convert, transfer = ceiling(Fraction(rates[2]) * 141), \
+                ceiling(Fraction(2, 100) * Fraction(rates[1]) / sat), 423
+            materials = ceiling(Fraction(5, 100) * Fraction(rates[1]) / sat)
+            envelope = ceiling(Fraction(6, 100) * Fraction(rates[1]) / sat)
+            post = ceiling(Fraction(75, 100) * Fraction(rates[1]) / sat)
+            card = 501 + network + materials
+            shared = convert + transfer + envelope + post
+            subtotal = card * cards + shared
+            operator = ceiling(Fraction(3, 20) * subtotal)
+            total = subtotal + operator
+            return {"card": card, "shared": shared, "share": ceiling(Fraction(shared, cards)),
+                    "operator": operator, "total": total,
+                    "toman": ceiling(total * sat), "product": quote_for_principal(*rates, 501, quantity=cards),
+                    "costs": {"network_sats": network, "convert_sats": convert, "transfer_sats": transfer,
+                              "materials_sats": materials, "envelope_sats": envelope, "post_sats": post},
+                    "sat": str(sat)}
+
+        scenarios = []
+        for cards in (1, 5):
+            expected = oracle(cards)
+            # The server's own answer must agree with the oracle before we test the browser.
+            self.assertEqual(expected["total"], expected["product"]["total_sats"])
+            self.assertEqual(expected["toman"], expected["product"]["total_toman"])
+            scenarios.append({"cards": cards, **{k: v for k, v in expected.items()
+                                                 if k not in ("product", "costs", "sat")}})
+        cost_block = oracle(1)["costs"]
+        sat_text = oracle(1)["sat"]
+        # The payload the page receives is the site's own quote, so the browser is
+        # tested against the real server shape while the oracle above stays independent.
+        server = quote_table(*rates)
+        payload_block = {"costs": server["costs"], "rows": server["rows"],
+                         "quantity": server["quantity"], "card_sats": server["card_sats"],
+                         "shared_sats": server["shared_sats"],
+                         "shared_share_sats": server["shared_share_sats"],
+                         "rates": server["rates"], "assumptions": server["assumptions"]}
+        self.assertEqual(server["costs"], {**cost_block, "tag_sats": 0})
+
+        self.run_script("const scenarios=" + json.dumps(scenarios) +
+                        ";const serverPayload=" + json.dumps(payload_block) + r''';
+const single=scenarios[0], many=scenarios[1];
+handler=async()=>{
+  const payload=marketFixture();
+  // Replace everything the server derives with the site's real quote for these rates.
+  Object.assign(payload,serverPayload);
+  return {ok:true,json:async()=>payload};
+};
+load(); await tick();
+// The card count defaults to one and the field is enabled once the rates arrive.
+assert.equal(ids['quote-quantity'].value,'1');
+assert.equal(ids['quote-quantity'].disabled,false);
+ids['quote-mode'].value='principal_sats'; await ids['quote-mode'].emit('change');
+await edit('quote-amount','501'); await ids['quote-form'].emit('submit');
+assert.equal(ids['quote-result'].hidden,false);
+assert.equal(ids['quote-total-sats'].textContent.replaceAll(',',''),String(single.total));
+assert.equal(ids['quote-shared-sats'].textContent.replaceAll(',',''),String(single.shared));
+assert.equal(ids['quote-shared-share'].textContent.replaceAll(',',''),String(single.share));
+// Five cards: per-card costs scale, the shared block does not.
+ids['quote-quantity'].value='5';
+await edit('quote-amount','501'); await ids['quote-form'].emit('submit');
+assert.equal(ids['quote-result'].hidden,false);
+assert.equal(ids['quote-card-sats'].textContent.replaceAll(',',''),String(many.card));
+assert.equal(ids['quote-shared-sats'].textContent.replaceAll(',',''),String(many.shared),
+  'The shared block must equal the single-card block');
+assert.equal(ids['quote-total-sats'].textContent.replaceAll(',',''),String(many.total));
+assert.equal(ids['quote-total-toman'].textContent.replaceAll(',',''),String(many.toman));
+assert.equal(ids['quote-total-rial'].textContent.replaceAll(',',''),String(many.toman*10));
+assert.ok(many.total < 5*single.total,'Five cards must cost less than five separate orders');
+// The share shrinks as the order grows, so the buyer sees the saving.
+assert.ok(Number(ids['quote-shared-share'].textContent.replaceAll(',','')) < single.share);
+// The count is written in Persian numerals, never Latin ones.
+assert.ok(ids['quote-result-quantity'].textContent.includes('۵'),ids['quote-result-quantity'].textContent);
+assert.ok(!/[0-9]/.test(ids['quote-result-quantity'].textContent),'no Latin digits in the prose');
+// Rejecting a bad count must not leave a stale total on screen.
+for(const bad of ['0','-1','101','abc','']) {
+  ids['quote-quantity'].value=bad;
+  await edit('quote-amount','501'); await ids['quote-form'].emit('submit');
+  assert.equal(ids['quote-result'].hidden,true,'bad count '+JSON.stringify(bad));
+}
+ids['quote-quantity'].value='5'; ids['quote-mode'].value='budget_toman';
+await ids['quote-mode'].emit('change'); await edit('quote-amount','600000');
+await ids['quote-form'].emit('submit');
+assert.equal(ids['quote-result'].hidden,false);
+assert.ok(Number(ids['quote-total-toman'].textContent.replaceAll(',',''))<=600000);
+assert.equal(requests.length,1,'Only the shared market request');
+assert.equal(requests[0].options.body,undefined,'The card count never leaves the browser');
+''', page="market")
+
     def test_custom_quote_readiness_stale_warning_and_unavailable_snapshot(self):
         self.run_script(r'''
 let deliver;
@@ -940,11 +1039,12 @@ class Element {
   async emit(name) { await Promise.all((this.listeners[name] || []).map(handler=>handler({preventDefault(){}}))); }
 }
 const names = process.argv[3] === 'converter' ? ['satoshi-converter','btc-amount','satoshi-amount','converter-status','gross-valuation','gross-status','gross-result','gross-toman','gross-raw-price','gross-fetched-at','gross-stale'] :
-  process.argv[3] === 'market' ? ['market-panel','market-status','market-loading','market-stale','market-data','market-fetched-at','btc-price','usdt-price','sat-price','network-fee-rate','quote-speed','quote-speed-economy','quote-speed-medium','quote-speed-fast','quote-tag','quote-in-person','quote-tag-cost','quote-options-status','quote-rows','quote-form','quote-mode','quote-amount','quote-calculate','quote-status','quote-result','quote-principal','quote-btc','quote-network','quote-convert','quote-transfer','quote-materials','quote-envelope','quote-post','quote-tag-cost-result','quote-operator','quote-operator-toman','quote-total-sats','quote-total-toman','quote-total-rial','quote-budget','quote-remainder','quote-budget-details','quote-result-fetched-at','quote-result-warning'] : [];
+  process.argv[3] === 'market' ? ['market-panel','market-status','market-loading','market-stale','market-data','market-fetched-at','btc-price','usdt-price','sat-price','network-fee-rate','quote-speed','quote-speed-economy','quote-speed-medium','quote-speed-fast','quote-tag','quote-in-person','quote-quantity','quote-tag-cost','quote-options-status','quote-rows','quote-form','quote-mode','quote-amount','quote-calculate','quote-status','quote-result','quote-principal','quote-btc','quote-network','quote-convert','quote-transfer','quote-materials','quote-envelope','quote-post','quote-tag-cost-result','quote-operator','quote-operator-toman','quote-total-sats','quote-total-toman','quote-total-rial','quote-budget','quote-remainder','quote-budget-details','quote-result-fetched-at','quote-result-warning','quote-card-sats','quote-shared-sats','quote-shared-share','quote-result-quantity'] : [];
 const ids=Object.fromEntries(names.map(name=>[name,new Element()]));
 if(ids['gross-result']) ids['gross-result'].hidden=true;
 if(ids['gross-stale']) ids['gross-stale'].hidden=true;
 if(ids['quote-mode']) ids['quote-mode'].value='principal_sats';
+if(ids['quote-quantity']) ids['quote-quantity'].value='1';
 if(ids['quote-result']) ids['quote-result'].hidden=true;
 if(ids['quote-calculate']) ids['quote-calculate'].disabled=true;
 if (ids['market-data']) ids['market-data'].hidden=true;
@@ -952,7 +1052,27 @@ if (ids['market-stale']) ids['market-stale'].hidden=true;
 global.document={getElementById:id=>ids[id] || null,createElement:tag=>new Element(tag)};
 let handler=async()=>{throw new Error('Offline fixture: unavailable');};
 const requests=[];
-global.fetch=async(url,options)=>{requests.push({url,options}); return handler(url,options);};
+global.fetch=async(url,options)=>{requests.push({url,options}); const response=await handler(url,options);
+  // The server derives these from costs and quantity; recompute them for any
+  // fixture a scenario mutated so the payload stays self-consistent.
+  const json=response&&response.json;
+  if(json) response.json=async()=>normalise(await json());
+  return response;};
+const normalise=payload=>{
+  if(!payload||!payload.costs||!Array.isArray(payload.rows)) return payload;
+  const c=payload.costs, q=payload.quantity||1;
+  payload.quantity=q;
+  payload.shared_sats=c.convert_sats+c.transfer_sats+c.envelope_sats+c.post_sats;
+  payload.shared_share_sats=Math.ceil(payload.shared_sats/q);
+  payload.rows=payload.rows.map(row=>{
+    const card=row.principal_sats+row.network_sats+row.materials_sats+(row.tag_sats||0);
+    const shared=row.convert_sats+row.transfer_sats+row.envelope_sats+row.post_sats;
+    return {...row,quantity:q,card_sats:card,shared_sats:shared,shared_share_sats:Math.ceil(shared/q)};
+  });
+  // The top-level card_sats is the first row's card block, as quote_table publishes it.
+  if(payload.rows.length) payload.card_sats=payload.rows[0].card_sats;
+  return payload;
+};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const all=root=>{const found=[];const walk=node=>{found.push(node);node.children.forEach(walk);};walk(root);return found;};
 const edit=async(id,value)=>{ids[id].value=value; await ids[id].emit('input');};
@@ -962,13 +1082,15 @@ const marketFixture=()=>({status:'fresh',fetched_at:'2026-10-30T10:00:00+00:00',
   rates:{btc_toman:'10000000000',usdt_toman:'100000',satoshi_toman:'100'},
   assumptions:{exchange_fee_percent:'1',operator_fee_percent:'15',materials_usd:'0.05',envelope_usd:'0.06',post_usd:'0.75',tag_usd:'0.12',seal_usd:'0.03',paper_usd:'0.01',print_usd:'0.01',convert_usd:'0.02',transfer_sats:423,transaction_vbytes:141,network_fee_rate:'1'},
   costs:{network_sats:141,convert_sats:20,transfer_sats:423,materials_sats:50,envelope_sats:60,post_sats:750,tag_sats:0},
-  rows:[{principal_sats:501,btc:'0.00000501',network_sats:141,convert_sats:20,transfer_sats:423,materials_sats:50,envelope_sats:60,post_sats:750,tag_sats:0,operator_sats:292,operator_toman:29200,total_sats:2237,total_toman:223700,total_rial:2237000,budget_toman:null,remainder_toman:0},
-        {principal_sats:1164,btc:'0.00001164',network_sats:141,convert_sats:20,transfer_sats:423,materials_sats:50,envelope_sats:60,post_sats:750,tag_sats:0,operator_sats:392,operator_toman:39200,total_sats:3000,total_toman:300000,total_rial:3000000,budget_toman:300000,remainder_toman:0}]});
+  quantity:1,card_sats:191,shared_sats:1253,shared_share_sats:1253,
+  rows:[{principal_sats:501,btc:'0.00000501',quantity:1,network_sats:141,convert_sats:20,transfer_sats:423,materials_sats:50,envelope_sats:60,post_sats:750,tag_sats:0,card_sats:191,shared_sats:1253,shared_share_sats:1253,operator_sats:292,operator_toman:29200,total_sats:2237,total_toman:223700,total_rial:2237000,budget_toman:null,remainder_toman:0},
+        {principal_sats:1164,btc:'0.00001164',quantity:1,network_sats:141,convert_sats:20,transfer_sats:423,materials_sats:50,envelope_sats:60,post_sats:750,tag_sats:0,card_sats:854,shared_sats:1253,shared_share_sats:1253,operator_sats:392,operator_toman:39200,total_sats:3000,total_toman:300000,total_rial:3000000,budget_toman:300000,remainder_toman:0}]});
 const load=()=>{
   // A reload gets a new DOM, not another set of listeners on the previous page.
   for(const name of names) ids[name]=new Element();
   for(const name of ['gross-result','gross-stale','quote-result','market-data','market-stale']) if(ids[name]) ids[name].hidden=true;
   if(ids['quote-mode']) ids['quote-mode'].value='principal_sats';
+if(ids['quote-quantity']) ids['quote-quantity'].value='1';
   if(ids['quote-speed']) ids['quote-speed'].value='economy';
   if(ids['quote-tag']) ids['quote-tag'].checked=false;
   if(ids['quote-calculate']) ids['quote-calculate'].disabled=true;

@@ -240,9 +240,12 @@ class QuoteTableTests(unittest.TestCase):
         # subtotal 501+156+20+423+50+60+743 = 1953; ceil(0.15 * 1953) = 293;
         # total 2246; ceil(2246 * 101) = 226846 toman.
         self.assertEqual(quote["rows"][0], {
-            "principal_sats": 501, "btc": "0.00000501",
+            "principal_sats": 501, "btc": "0.00000501", "quantity": 1,
             "network_sats": 156, "convert_sats": 20, "transfer_sats": 423,
             "materials_sats": 50, "envelope_sats": 60, "post_sats": 743, "tag_sats": 0,
+            # Card-bound costs (principal + network + materials + tag) and the
+            # shared block paid once per order (convert + transfer + envelope + post).
+            "card_sats": 707, "shared_sats": 1246, "shared_share_sats": 1246,
             "operator_sats": 293, "operator_toman": 29593, "total_sats": 2246,
             "total_toman": 226846, "total_rial": 2268460,
             "budget_toman": None, "remainder_toman": 0,

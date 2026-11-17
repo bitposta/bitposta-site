@@ -326,7 +326,12 @@ class ApplicationContract(unittest.TestCase):
             for variant, enabled in (('no_tag', False), ('with_tag', True)):
                 self.assertEqual(data['quote_options'][speed][variant],
                                  quote_table('21000000000', '270000', rate, include_tag=enabled))
-        self.assertEqual({key: data[key] for key in ('rates', 'costs', 'assumptions', 'rows')},
+        # The top-level quote is exactly the economy/no_tag option. quote_table also
+        # publishes the per-order quantity and the shared-cost block, so those keys
+        # belong in this comparison too.
+        self.assertEqual({key: data[key] for key in (
+            'rates', 'costs', 'assumptions', 'rows',
+            'quantity', 'card_sats', 'shared_sats', 'shared_share_sats')},
                          data['quote_options']['economy']['no_tag'])
         for invalid in (None, 'NaN', True, '0', '10001'):
             service.snapshot.return_value['fee_rates']['medium'] = invalid

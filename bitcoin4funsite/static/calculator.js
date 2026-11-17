@@ -5,6 +5,9 @@
   const maximum = 2100000000000000n;
   const positiveDecimal = value => typeof value === "string" && value.length <= 48 &&
     /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) && /[1-9]/.test(value);
+  /** Persian numerals for prose: the site writes counts in Persian digits, never Latin ones. */
+  const persianDigits = value => String(value).replace(/[0-9]/g,
+    digit => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
   const grouped = value => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   const decimal = value => {
     const parts = value.split(".");
@@ -34,6 +37,8 @@
     }
     return marketRequest;
   }
+  /** The largest card count the pricing core accepts; keep in step with pricing._quantity. */
+  const MAX_QUANTITY = 100;
   function validSnapshot(market) {
     return market && ["fresh", "stale"].includes(market.status) &&
       typeof market.fetched_at === "string" &&
@@ -160,10 +165,14 @@
   const speed = document.getElementById("quote-speed");
   const tag = document.getElementById("quote-tag");
   const inPerson = document.getElementById("quote-in-person");
+  const quantityInput = document.getElementById("quote-quantity");
   /** The catalog key for the current tag/hand-delivery choice; hand delivery drops materials and post. */
   const variantName = (withTag, hand) => (withTag ? "with_tag" : "no_tag") + (hand ? "_in_person" : "");
 
-  function quote(principal) {
+  let quantity = 1;
+
+  function quote(principal, cards = quantity) {
+    const count = BigInt(cards);
     const network = BigInt(snapshot.costs.network_sats);
     const convert = BigInt(snapshot.costs.convert_sats ?? 0);
     const transfer = BigInt(snapshot.costs.transfer_sats ?? 0);
@@ -172,18 +181,34 @@
     const post = BigInt(snapshot.costs.post_sats);
     const tagCost = BigInt(snapshot.costs.tag_sats ?? 0);
     // The 1% exchange markup already lives in the satoshi price, so the principal
-    // is charged once. convert and transfer are the two fixed acquisition costs.
-    const operator = ceilDivide((principal + network + convert + transfer +
-      materials + envelope + post + tagCost) * 15n, 100n);
-    const total = principal + network + convert + transfer +
-      materials + envelope + post + tagCost + operator;
+    // is charged once. Two cost groups: the CARD group (principal, delivery network
+    // fee, card materials, tag) is spent per paper card; the SHARED group (the two
+    // exchange acquisition fees, the postal envelope and the postage) is spent once
+    // per order, so five cards cost less than five separate orders.
+    const card = principal + network + materials + tagCost;
+    const shared = convert + transfer + envelope + post;
+    const subtotal = card * count + shared;
+    const operator = ceilDivide(subtotal * 15n, 100n);
+    const total = subtotal + operator;
     const rate = rational(snapshot.rates.satoshi_toman);
     const toman = ceilDivide(total * rate.numerator, rate.denominator);
     // The operator's income in toman: the same 15% fee converted once, never 15% of total-toman.
     const operatorToman = ceilDivide(operator * rate.numerator, rate.denominator);
+    // The per-card share of the shared block, rounded UP so the figure never
+    // under-states what the buyer pays. Shown for comparison, never charged again.
+    const sharedShare = ceilDivide(shared, count);
     return { principal, network, convert, transfer, materials, envelope, post,
-      "tag-cost-result": tagCost, operator, "operator-toman": operatorToman,
+      "tag-cost-result": tagCost, "card-sats": card, "shared-sats": shared,
+      "shared-share": sharedShare, operator, "operator-toman": operatorToman,
       "total-sats": total, "total-toman": toman, "total-rial": toman * 10n };
+  }
+
+  /** Read the card count from the input; an invalid value falls back to 1 and is reported. */
+  function readQuantity() {
+    const raw = (quantityInput?.value ?? "1").trim();
+    if (!/^[1-9][0-9]*$/.test(raw)) return null;
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value >= 1 && value <= MAX_QUANTITY ? value : null;
   }
 
   form.addEventListener("submit", event => {
@@ -191,6 +216,12 @@
     clearResult();
     amount.removeAttribute("aria-invalid");
     if (!snapshot) return;
+    const cards = readQuantity();
+    if (cards === null) {
+      reject("تعداد کارت باید عدد صحیح از یک تا صد باشد.");
+      return;
+    }
+    quantity = cards;
     if (!["principal_sats", "budget_toman"].includes(mode.value) ||
         amount.value.length > 32 || !/^[1-9][0-9]*$/.test(amount.value)) {
       reject("مقدار معتبر نیست؛ فقط عدد صحیح مثبت با ارقام انگلیسی، بدون فاصله، جداکننده یا صفر ابتدایی و حداکثر سی‌ودو رقم وارد کنید.");
@@ -204,7 +235,7 @@
     }
     if (mode.value === "budget_toman") {
       budget = principal;
-      if (quote(501n)["total-toman"] > budget) {
+      if (quote(501n, cards)["total-toman"] > budget) {
         reject("بودجه برای حداقل اصل مبلغ و همهٔ هزینه‌ها کافی نیست؛ بودجه را افزایش دهید.");
         return;
       }
@@ -213,16 +244,19 @@
       let high = maximum;
       while (low < high) {
         const middle = (low + high + 1n) / 2n;
-        if (quote(middle)["total-toman"] <= budget) low = middle;
+        if (quote(middle, cards)["total-toman"] <= budget) low = middle;
         else high = middle - 1n;
       }
       principal = low;
     }
-    const values = quote(principal);
+    const values = quote(principal, cards);
     for (const [name, value] of Object.entries(values)) {
       document.getElementById("quote-" + name).textContent = grouped(value);
     }
     document.getElementById("quote-btc").textContent = bitcoin(values.principal);
+    document.getElementById("quote-result-quantity").textContent = cards === 1
+      ? "این برآورد برای یک کارت است."
+      : "این برآورد برای " + persianDigits(cards) + " کارت است. چهار هزینهٔ سفارشی (کارمزد تبدیل، کارمزد انتقال، پاکت پستی و پست) فقط یک‌بار حساب شده‌اند.";
     document.getElementById("quote-budget-details").hidden = budget === null;
     document.getElementById("quote-budget").textContent = budget === null ? "" : grouped(budget);
     document.getElementById("quote-remainder").textContent = budget === null ? "" : grouped(budget - values["total-toman"]);
@@ -239,7 +273,8 @@
   function clearResult() {
     result.hidden = true;
     for (const name of ["principal", "btc", "network", "convert", "transfer", "materials", "envelope", "post", "tag-cost-result", "operator", "operator-toman", "total-sats", "total-toman",
-      "total-rial", "budget", "remainder", "result-warning", "result-fetched-at"]) {
+      "total-rial", "budget", "remainder", "result-warning", "result-fetched-at",
+      "card-sats", "shared-sats", "shared-share", "result-quantity"]) {
       document.getElementById("quote-" + name).textContent = "";
     }
     document.getElementById("quote-budget-details").hidden = true;
@@ -300,6 +335,10 @@
         !integer(market.costs?.convert_sats) || !integer(market.costs?.transfer_sats) ||
         !integer(market.costs?.post_sats) ||
         !integer(market.costs?.tag_sats ?? 0) ||
+        !Number.isInteger(market.quantity) || market.quantity < 1 || market.quantity > MAX_QUANTITY ||
+        !integer(market.card_sats) || !integer(market.shared_sats) ||
+        market.shared_sats !== (market.costs.convert_sats ?? 0) + (market.costs.transfer_sats ?? 0) +
+          (market.costs.envelope_sats ?? 0) + market.costs.post_sats ||
         !Array.isArray(market.rows) || market.rows.length < 1 || market.rows.length > 31) return false;
     return market.rows.every((row, index) => {
       if (!row || ![row.principal_sats, row.network_sats, row.convert_sats, row.transfer_sats,
@@ -313,10 +352,18 @@
           row.post_sats !== market.costs.post_sats ||
           (row.tag_sats ?? 0) !== (market.costs.tag_sats ?? 0)) return false;
       const [whole, fraction] = row.btc.split(".");
+      // quantity and the shared block are per ORDER (top level); each row repeats them.
+      const cards = BigInt(market.quantity);
+      const cardSats = BigInt(row.principal_sats) + BigInt(row.network_sats) +
+        BigInt(row.materials_sats) + BigInt(row.tag_sats ?? 0);
+      const sharedSats = BigInt(row.convert_sats) + BigInt(row.transfer_sats) +
+        BigInt(row.envelope_sats ?? 0) + BigInt(row.post_sats);
+      if (BigInt(row.card_sats) !== cardSats || BigInt(row.shared_sats) !== sharedSats ||
+          BigInt(row.shared_sats) !== BigInt(market.shared_sats) ||
+          BigInt(row.shared_share_sats) !== ceilDivide(sharedSats, cards) ||
+          BigInt(row.quantity) !== cards) return false;
       if (BigInt(whole) * 100000000n + BigInt(fraction) !== BigInt(row.principal_sats) ||
-          BigInt(row.principal_sats) + BigInt(row.network_sats) + BigInt(row.convert_sats) +
-          BigInt(row.transfer_sats) + BigInt(row.materials_sats) + BigInt(row.envelope_sats ?? 0) + BigInt(row.post_sats) +
-          BigInt(row.tag_sats ?? 0) + BigInt(row.operator_sats) !== BigInt(row.total_sats) ||
+          cardSats * cards + sharedSats + BigInt(row.operator_sats) !== BigInt(row.total_sats) ||
           BigInt(row.total_toman) * 10n !== BigInt(row.total_rial)) return false;
       if (index === 0) return row.principal_sats === 501 && row.budget_toman === null && row.remainder_toman === 0;
       return integer(row.budget_toman) && row.budget_toman >= 100000 && row.budget_toman <= 3000000 &&
@@ -354,20 +401,21 @@
         BigInt(choice.costs.envelope_sats ?? 0) !== envelope ||
         BigInt(choice.costs.post_sats) !== post ||
         BigInt(choice.costs.tag_sats) !== tagCost) return false;
-    const cost = principal => {
-      const subtotal = principal + network + convert + transfer +
-        materials + envelope + post + tagCost;
+    const cost = (principal, cards) => {
+      const subtotal = (principal + network + materials + tagCost) * cards +
+        convert + transfer + envelope + post;
       return ceilDivide(ceilDivide(subtotal * 115n, 100n) * sat.numerator, sat.denominator);
     };
     return choice.rows.every(row => {
       if (!integer(row.tag_sats)) return false;
       const principal = BigInt(row.principal_sats);
-      const subtotal = principal + network + convert + transfer +
-        materials + envelope + post + tagCost;
+      const cards = BigInt(choice.quantity);
+      const subtotal = (principal + network + materials + tagCost) * cards +
+        convert + transfer + envelope + post;
       return BigInt(row.operator_sats) === ceilDivide(subtotal * 15n, 100n) &&
         BigInt(row.operator_toman) === ceilDivide(BigInt(row.operator_sats) * sat.numerator, sat.denominator) &&
-        BigInt(row.total_toman) === cost(principal) &&
-        (row.budget_toman === null || principal === maximum || cost(principal + 1n) > BigInt(row.budget_toman));
+        BigInt(row.total_toman) === cost(principal, cards) &&
+        (row.budget_toman === null || principal === maximum || cost(principal + 1n, cards) > BigInt(row.budget_toman));
     });
   }
 
@@ -391,11 +439,17 @@
     const details = element("details", undefined, "quote-details");
     const breakdown = element("dl");
     for (const [label, value] of [
-      ["اصل مبلغ؛ ساتوشی", row.principal_sats],
-      ["کارمزد تبدیل؛ ساتوشی", row.convert_sats], ["کارمزد انتقال بیت‌کوین؛ ساتوشی", row.transfer_sats],
-      ["شبکه (تحویل)؛ ساتوشی", row.network_sats],
-      ["مواد پاکت؛ ساتوشی", row.materials_sats], ["پاکت؛ ساتوشی", row.envelope_sats ?? 0], ["پست؛ ساتوشی", row.post_sats],
-      ["برچسب؛ ساتوشی", row.tag_sats ?? 0],
+      ["اصل مبلغ هر کارت؛ ساتوشی", row.principal_sats],
+      ["مواد پاکت هر کارت (مهر، کاغذ، چاپ)؛ ساتوشی", row.materials_sats],
+      ["شبکه (تحویل) هر کارت؛ ساتوشی", row.network_sats],
+      ["برچسب هر کارت؛ ساتوشی", row.tag_sats ?? 0],
+      ["جمع هر کارت؛ ساتوشی", row.card_sats],
+      ["کارمزد تبدیل، یک‌بار در سفارش؛ ساتوشی", row.convert_sats],
+      ["کارمزد انتقال بیت‌کوین (۴۲۳)، یک‌بار در سفارش؛ ساتوشی", row.transfer_sats],
+      ["پاکت پستی، یک‌بار در سفارش؛ ساتوشی", row.envelope_sats ?? 0],
+      ["پست، یک‌بار در سفارش؛ ساتوشی", row.post_sats],
+      ["جمع چهار قلم سفارشی؛ ساتوشی", row.shared_sats],
+      ["سهم هر کارت از آن چهار قلم؛ ساتوشی", row.shared_share_sats],
       ["گرداننده؛ ساتوشی", row.operator_sats],
       ["درآمد گرداننده؛ تومان", row.operator_toman],
       ["جمع؛ ساتوشی", row.total_sats], ["معادل ریال", row.total_rial],
@@ -443,6 +497,7 @@
       speed.disabled = false;
       tag.disabled = !catalog.economy.with_tag;
       inPerson.disabled = !catalog.economy.no_tag_in_person;
+      if (quantityInput) quantityInput.disabled = false;
       document.getElementById("quote-options-status").textContent =
         ["medium", "fast"].some(name => !catalog[name])
           ? "بعضی گزینه‌ها نرخ معتبر ندارند و غیرفعال‌اند؛ نرخ جایگزین فرض نشده است."

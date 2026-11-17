@@ -66,24 +66,42 @@ def _ceil(value: Decimal) -> int:
 
 def _quote_row(principal: int, network: int, materials: int, post: int,
                satoshi_toman: Decimal, budget: int | None = None, tag: int = 0,
-               envelope: int = 0, convert: int = 0, transfer: int = 0) -> dict:
+               envelope: int = 0, convert: int = 0, transfer: int = 0,
+               quantity: int = 1) -> dict:
     # The 1% exchange markup already lives in satoshi_toman, so the principal is
     # charged exactly once. convert and transfer are the two fixed acquisition
     # costs and are part of the operator's 15% subtotal like every other cost.
-    operator = _ceil(Decimal("0.15") * (principal + network + convert + transfer
-                                        + materials + envelope + post + tag))
-    total_sats = (principal + network + convert + transfer
-                  + materials + envelope + post + tag + operator)
+    #
+    # Two cost groups, and the owner's distinction is the whole point of the
+    # quantity field:
+    #   card   — spent per paper card: the principal, the delivery network fee,
+    #            the envelope materials (wax seal, paper, print) and the tag.
+    #   shared — spent ONCE per order: the exchange conversion fee, the 423-satoshi
+    #            transfer, the postal envelope and the postage. A buyer ordering
+    #            five cards pays these one time, not five.
+    # principal is the amount on ONE card; quantity multiplies the card group.
+    card_sats = principal + network + materials + tag
+    shared_sats = convert + transfer + envelope + post
+    subtotal = card_sats * quantity + shared_sats
+    operator = _ceil(Decimal("0.15") * subtotal)
+    total_sats = subtotal + operator
     total_toman = _ceil(total_sats * satoshi_toman)
     # The operator's income in toman: the same 15% fee, converted at the same rate and
     # rounded up once. Never recomputed from total_toman, which would double the ceiling.
     operator_toman = _ceil(operator * satoshi_toman)
+    # The per-card share of the shared block, rounded UP so a row never under-states
+    # what the buyer pays. This is what the table shows so orders of different
+    # sizes are comparable; it is NOT charged again per card.
+    shared_share_sats = -(-shared_sats // quantity)
     return {
         "principal_sats": principal, "btc": sats_to_btc(principal),
+        "quantity": quantity,
         "network_sats": network, "convert_sats": convert, "transfer_sats": transfer,
         "materials_sats": materials,
         "envelope_sats": envelope, "post_sats": post,
         "tag_sats": tag,
+        "card_sats": card_sats, "shared_sats": shared_sats,
+        "shared_share_sats": shared_share_sats,
         "operator_sats": operator, "operator_toman": operator_toman, "total_sats": total_sats,
         "total_toman": total_toman, "total_rial": total_toman * 10,
         "budget_toman": budget,
@@ -189,7 +207,16 @@ def raw_asset_toman(raw_btc, principal_sats) -> str:
         return _decimal_text(raw * principal / SATOSHIS_PER_BTC)
 
 
-def quote_for_principal(btc_toman, usdt_toman, fee_rate, principal_sats, *, include_tag=False, in_person=False) -> dict:
+def _quantity(value, name: str = "quantity") -> int:
+    """Parse the number of cards in one order: a plain int in [1, 100]."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("quantity must be an integer")
+    if not 1 <= value <= 100:
+        raise ValueError("quantity must be between 1 and 100")
+    return value
+
+
+def quote_for_principal(btc_toman, usdt_toman, fee_rate, principal_sats, *, include_tag=False, in_person=False, quantity=1) -> dict:
     """Quote one supply-bounded package; row fields keep the v1 numeric types.
 
     The returned row also includes the table's rates, assumptions and costs.
@@ -197,17 +224,26 @@ def quote_for_principal(btc_toman, usdt_toman, fee_rate, principal_sats, *, incl
     digits, at most 64 characters, in [501, MAX_SATOSHIS]. Otherwise ValueError.
     in_person drops the envelope materials and the postage, because the buyer
     collects the card by hand.
+    quantity is the number of identical cards in ONE order (an int in [1, 100],
+    default 1). It multiplies only the card-bound costs — the principal, the
+    delivery network fee, the envelope materials and the tag. The two exchange
+    acquisition fees, the postal envelope and the postage are paid once per
+    order, so they are NOT multiplied: five cards cost less than five orders.
+    shared_share_sats is the per-card share of that shared block, so a row can
+    state what one card effectively carries.
     """
     principal = _unsigned_integer(principal_sats, "principal_sats", 501, MAX_SATOSHIS)
+    cards = _quantity(quantity)
     (satoshi_toman, network, convert, transfer, materials, envelope, post, tag,
      metadata) = _pricing_inputs(btc_toman, usdt_toman, fee_rate, include_tag, in_person)
     with localcontext(Context(prec=128)):
         row = _quote_row(principal, network, materials, post, satoshi_toman, tag=tag,
-                         envelope=envelope, convert=convert, transfer=transfer)
+                         envelope=envelope, convert=convert, transfer=transfer,
+                         quantity=cards)
     return {**row, **metadata}
 
 
-def quote_for_budget(btc_toman, usdt_toman, fee_rate, budget_toman, *, include_tag=False, in_person=False) -> dict:
+def quote_for_budget(btc_toman, usdt_toman, fee_rate, budget_toman, *, include_tag=False, in_person=False, quantity=1) -> dict:
     """Return the largest principal in [501, MAX_SATOSHIS] fitting the budget.
 
     Budget is a whole toman amount: int (not bool) or unsigned ASCII digits,
@@ -215,13 +251,17 @@ def quote_for_budget(btc_toman, usdt_toman, fee_rate, budget_toman, *, include_t
     cannot be afforded, ValueError is raised (no fictitious principal or row).
     Successful rows include rates/assumptions/costs and the unspent remainder.
     in_person drops the envelope materials and the postage.
+    quantity multiplies only the card-bound costs (see quote_for_principal), so
+    the shared acquisition and postal charges are paid once for the whole order.
     """
     budget = _unsigned_integer(budget_toman, "budget_toman", 0, 10**64 - 1)
+    cards = _quantity(quantity)
     (satoshi_toman, network, convert, transfer, materials, envelope, post, tag,
      metadata) = _pricing_inputs(btc_toman, usdt_toman, fee_rate, include_tag, in_person)
     with localcontext(Context(prec=128)):
         minimum = _quote_row(501, network, materials, post, satoshi_toman, tag=tag,
-                             envelope=envelope, convert=convert, transfer=transfer)
+                             envelope=envelope, convert=convert, transfer=transfer,
+                             quantity=cards)
         if minimum["total_toman"] > budget:
             raise ValueError(
                 f"budget_toman insufficient for minimum 501-satoshi package; "
@@ -231,17 +271,19 @@ def quote_for_budget(btc_toman, usdt_toman, fee_rate, budget_toman, *, include_t
         while low < high:
             middle = (low + high + 1) // 2
             candidate = _quote_row(middle, network, materials, post, satoshi_toman, tag=tag,
-                                   envelope=envelope, convert=convert, transfer=transfer)
+                                   envelope=envelope, convert=convert, transfer=transfer,
+                                   quantity=cards)
             if candidate["total_toman"] <= budget:
                 low = middle
             else:
                 high = middle - 1
         row = _quote_row(low, network, materials, post, satoshi_toman, budget, tag=tag,
-                         envelope=envelope, convert=convert, transfer=transfer)
+                         envelope=envelope, convert=convert, transfer=transfer,
+                         quantity=cards)
     return {**row, **metadata}
 
 
-def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person=False) -> dict:
+def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person=False, quantity=1) -> dict:
     """Return an offline quote using the selected fee in sat/vbyte.
 
     Rates accept int, Decimal or unsigned ASCII decimal text, never float/bool.
@@ -295,14 +337,21 @@ def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person
     binary search finds the largest supply-bounded principal that fits each
     ceiling. Remainder is budget minus actual rounded cost (zero without a
     budget); it is never hidden by pretending the whole budget was spent.
+    quantity is the number of identical cards in ONE order (an int in [1, 100],
+    default 1). Only the card-bound costs are multiplied — the principal, the
+    delivery network fee, the envelope materials and the tag. The two exchange
+    acquisition fees, the postal envelope and the postage are paid ONCE per
+    order, so five cards cost less than five separate orders.
     """
     satoshi_toman, network_sats, convert_sats, transfer_sats, materials_sats, envelope_sats, post_sats, tag, metadata = _pricing_inputs(
         btc_toman, usdt_toman, fee_rate, include_tag, in_person)
+    cards = _quantity(quantity)
     with localcontext(Context(prec=128)):
         def build(principal, budget=None):
             return _quote_row(principal, network_sats, materials_sats, post_sats, satoshi_toman,
                               budget, tag=tag, envelope=envelope_sats,
-                              convert=convert_sats, transfer=transfer_sats)
+                              convert=convert_sats, transfer=transfer_sats,
+                              quantity=cards)
 
         first = build(501)
         rows = [first]
@@ -316,4 +365,11 @@ def quote_table(btc_toman, usdt_toman, fee_rate, *, include_tag=False, in_person
                 else:
                     high = middle - 1
             rows.append(build(low, budget))
-        return {**metadata, "rows": rows}
+        # quantity and the shared block are per ORDER, not per row, so they sit at
+        # the top level beside costs. rows[].shared_share_sats carries the per-card
+        # share of the same block.
+        return {**metadata, "quantity": cards,
+                "shared_sats": rows[0]["shared_sats"],
+                "shared_share_sats": rows[0]["shared_share_sats"],
+                "card_sats": rows[0]["card_sats"],
+                "rows": rows}
