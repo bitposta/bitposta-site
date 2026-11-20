@@ -215,10 +215,10 @@
     // The per-card share of the postal block, rounded UP so the figure never
     // under-states what the buyer pays. Shown for comparison, never charged again.
     const sharedShare = ceilDivide(shared, count);
-    return { principal, network, materials, envelope, post,
-      "tag-cost-result": tagCost, "print-materials": printMaterials,
-      "post-total": envelope + post, "card-sats": card,
-      "shared-share": sharedShare, operator, "operator-toman": operatorToman,
+    // Only the three published groups are shown; the per-component parts stay in
+    // the arithmetic and in the server payload, never as extra result rows.
+    return { principal, network, "print-materials": printMaterials,
+      "post-total": envelope + post, operator, "operator-toman": operatorToman,
       "total-sats": total, "total-toman": toman, "total-rial": toman * 10n };
   }
 
@@ -291,9 +291,10 @@
 
   function clearResult() {
     result.hidden = true;
-    for (const name of ["principal", "btc", "network", "materials", "envelope", "post", "tag-cost-result", "print-materials", "post-total", "operator", "operator-toman", "total-sats", "total-toman",
+    for (const name of ["principal", "btc", "network", "print-materials", "post-total",
+      "operator", "operator-toman", "total-sats", "total-toman",
       "total-rial", "budget", "remainder", "result-warning", "result-fetched-at",
-      "card-sats", "shared-share", "result-quantity"]) {
+      "result-quantity"]) {
       document.getElementById("quote-" + name).textContent = "";
     }
     document.getElementById("quote-budget-details").hidden = true;
@@ -468,15 +469,9 @@
     const breakdown = element("dl");
     for (const [label, value] of [
       ["اصل مبلغ هر کارت؛ ساتوشی", row.principal_sats],
-      ["شبکه (تحویل) هر کارت؛ ساتوشی", row.network_sats],
-      ["مواد چاپ و مهر هر کارت؛ ساتوشی", row.materials_sats],
-      ["برچسب NFC هر کارت؛ ساتوشی", row.tag_sats ?? 0],
-      ["گروه چاپ، مهر و برچسب هر کارت؛ ساتوشی", row.print_materials_sats],
-      ["جمع هر کارت؛ ساتوشی", row.card_sats],
-      ["پاکت پستی، یک‌بار در سفارش؛ ساتوشی", row.envelope_sats],
-      ["پست، یک‌بار در سفارش؛ ساتوشی", row.post_sats],
-      ["گروه پست، یک‌بار در سفارش؛ ساتوشی", row.post_total_sats],
-      ["سهم هر کارت از گروه پست؛ ساتوشی", row.shared_share_sats],
+      ["شبکهٔ تحویل هر کارت؛ ساتوشی", row.network_sats],
+      ["چاپ، مهر و موم و برچسب NFC هر کارت؛ ساتوشی", row.print_materials_sats],
+      ["پاکت و پست، یک‌بار در سفارش؛ ساتوشی", row.post_total_sats],
       ["گرداننده؛ ساتوشی", row.operator_sats],
       ["درآمد گرداننده؛ تومان", row.operator_toman],
       ["جمع؛ ساتوشی", row.total_sats], ["معادل ریال", row.total_rial],

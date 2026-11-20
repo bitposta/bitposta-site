@@ -289,7 +289,9 @@ assert.ok(all(first).some(node=>node.textContent==='0.00000501'));
 assert.ok(all(first).some(node=>node.textContent==='160,218'));
 assert.ok(all(first).some(node=>node.tagName==='details'));
 const detailText=all(first).map(node=>node.textContent).join(' ');
-for (const word of ['شبکه','مواد چاپ','پاکت','پست','گرداننده','ریال','1,602,180','74','49','58','725','141','783']) assert.ok(detailText.includes(word),word);
+for (const word of ['شبکه','چاپ','پاکت و پست','گرداننده','ریال','1,602,180','74','49','141','783']) assert.ok(detailText.includes(word),word);
+// One line per cost group: no per-component rows in the row details.
+for (const gone of ['مواد چاپ و مهر هر کارت؛','پاکت پستی، یک','ارسال پست (یک','سهم هر کارت از گروه پست','جمع هر کارت؛']) assert.ok(!detailText.includes(gone),gone);
 const secondText=all(ids['quote-rows'].children[1]).map(node=>node.textContent).join(' ');
 assert.match(secondText,/باقی‌مانده/);
 assert.ok(secondText.includes('0'));
@@ -322,13 +324,13 @@ for (const speed of ['economy','medium','fast']) {
     for(const [index,row] of table.rows.entries()) {
       const displayed=all(ids['quote-rows'].children[index]).map(n=>n.textContent.replaceAll(',',''));
       assert.ok(displayed.includes(String(row.total_toman)));
-      assert.ok(displayed.includes(String(row.tag_sats)));
+      assert.ok(displayed.includes(String(row.print_materials_sats)));
       ids['quote-mode'].value=row.budget_toman===null?'principal_sats':'budget_toman';
       await ids['quote-mode'].emit('change');
       await edit('quote-amount',String(row.budget_toman??row.principal_sats));
       await ids['quote-form'].emit('submit');
       assert.equal(ids['quote-result'].hidden,false,JSON.stringify({speed,variant,row}));
-      for(const [key,field] of Object.entries({principal_sats:'principal',network_sats:'network',materials_sats:'materials',envelope_sats:'envelope',post_sats:'post',tag_sats:'tag-cost-result',print_materials_sats:'print-materials',post_total_sats:'post-total',operator_sats:'operator',total_toman:'total-toman',total_sats:'total-sats',total_rial:'total-rial'})) {
+      for(const [key,field] of Object.entries({principal_sats:'principal',network_sats:'network',print_materials_sats:'print-materials',post_total_sats:'post-total',operator_sats:'operator',total_toman:'total-toman',total_sats:'total-sats',total_rial:'total-rial'})) {
         assert.equal(ids['quote-'+field].textContent.replaceAll(',',''),String(row[key]),speed+variant+key);
       }
     }
@@ -371,7 +373,7 @@ for(const test of cases) {
     assert.equal(ids['quote-status'].dataset.state,'error');
   } else {
     assert.equal(ids['quote-result'].hidden,false);
-    for(const [field,value] of Object.entries({principal:test.principal,'total-toman':test.total,remainder:test.remainder,'tag-cost-result':test.tag}))
+    for(const [field,value] of Object.entries({principal:test.principal,'total-toman':test.total,remainder:test.remainder}))
       assert.equal(ids['quote-'+field].textContent.replaceAll(',',''),value,field+test.budget);
   }
 }
@@ -406,7 +408,7 @@ for (const damage of [
   assert.match(ids['quote-result-warning'].textContent,/قدیمی/);
   ids['quote-speed'].value='medium'; await ids['quote-speed'].emit('change');
   assert.equal(ids['quote-result'].hidden,true);
-  assert.equal(ids['quote-tag-cost-result'].textContent,'');
+  assert.equal(ids['quote-print-materials'].textContent,'');
   assert.equal(ids['quote-calculate'].disabled,true);
   assert.equal(ids['quote-rows'].children.length,0);
   await ids['quote-form'].emit('submit');
@@ -437,7 +439,7 @@ assert.equal(ids['quote-tag'].disabled,true,'A wallet-only order has no card to 
 assert.equal(ids['quote-result'].hidden,true,'Changing the choice clears the old result');
 await edit('quote-amount','3000'); await ids['quote-form'].emit('submit');
 assert.equal(ids['quote-result'].hidden,false);
-for(const field of ['print-materials','post-total','materials','envelope','post'])
+for(const field of ['print-materials','post-total'])
   assert.equal(ids['quote-'+field].textContent,'0',field);
 // The principal and the network fee survive: the bitcoin still has to travel.
 assert.equal(ids['quote-principal'].textContent,'3,000');
@@ -472,7 +474,7 @@ assert.equal(requests.length,1,'Only the shared market request');
         self.assertIn("selected", document.by_id("quote-speed-economy"))
         for phrase in ("۰٫۱۲", "برچسب", "متوسط", "سریع", "تضمین"):
             self.assertIn(phrase, source)
-        for field in ("quote-tag-cost", "quote-tag-cost-result"):
+        for field in ("quote-tag-cost",):
             self.assertEqual(document.by_id(field)["dir"], "ltr")
 
     def test_custom_principal_calculation_is_explicit_exact_and_local(self):
@@ -484,7 +486,7 @@ await edit('quote-amount','3000');
 assert.equal(ids['quote-result'].hidden,true,'Typing must not calculate');
 await ids['quote-form'].emit('submit');
 assert.equal(ids['quote-result'].hidden,false);
-for(const [field,value] of Object.entries({principal:'3,000',btc:'0.00003',network:'141',materials:'49',envelope:'58',post:'725','tag-cost-result':'0','print-materials':'49','post-total':'783',operator:'199','total-sats':'4,172','total-toman':'431,802','total-rial':'4,318,020'})) {
+for(const [field,value] of Object.entries({principal:'3,000',btc:'0.00003',network:'141','print-materials':'49','post-total':'783',operator:'199','total-sats':'4,172','total-toman':'431,802','total-rial':'4,318,020'})) {
   assert.equal(ids['quote-'+field].textContent,value,field);
 }
 assert.equal(ids['quote-status'].dataset.state,'success');
@@ -560,7 +562,7 @@ for(const mode of ['principal_sats','budget_toman']) {
     assert.equal(ids['quote-result'].hidden,false);
     await edit('quote-amount',value); await ids['quote-form'].emit('submit');
     assert.equal(ids['quote-result'].hidden,true,JSON.stringify(value));
-    for(const key of ['principal','btc','network','materials','envelope','post','print-materials','post-total','operator','total-sats','total-toman','total-rial','budget','remainder']) assert.equal(ids['quote-'+key].textContent,'','Clear old result: '+value);
+    for(const key of ['principal','btc','network','print-materials','post-total','operator','total-sats','total-toman','total-rial','budget','remainder']) assert.equal(ids['quote-'+key].textContent,'','Clear old result: '+value);
     assert.equal(ids['quote-amount'].getAttribute('aria-invalid'),'true',JSON.stringify(value));
     assert.equal(ids['quote-status'].dataset.state,'error');
     if(value==='160217') assert.match(ids['quote-status'].textContent,/کافی نیست/);
@@ -642,20 +644,19 @@ await edit('quote-amount','501'); await ids['quote-form'].emit('submit');
 assert.equal(ids['quote-result'].hidden,false);
 assert.equal(ids['quote-total-sats'].textContent.replaceAll(',',''),String(single.total));
 assert.equal(ids['quote-post-total'].textContent.replaceAll(',',''),String(single.shared));
-assert.equal(ids['quote-shared-share'].textContent.replaceAll(',',''),String(single.share));
+assert.equal(ids['quote-post-total'].textContent.replaceAll(',',''),String(single.shared));
 // Five cards: per-card costs scale, the shared block does not.
 ids['quote-quantity'].value='5';
 await edit('quote-amount','501'); await ids['quote-form'].emit('submit');
 assert.equal(ids['quote-result'].hidden,false);
-assert.equal(ids['quote-card-sats'].textContent.replaceAll(',',''),String(many.card));
 assert.equal(ids['quote-post-total'].textContent.replaceAll(',',''),String(many.shared),
   'The postal block must equal the single-card block');
 assert.equal(ids['quote-total-sats'].textContent.replaceAll(',',''),String(many.total));
 assert.equal(ids['quote-total-toman'].textContent.replaceAll(',',''),String(many.toman));
 assert.equal(ids['quote-total-rial'].textContent.replaceAll(',',''),String(many.toman*10));
 assert.ok(many.total < 5*single.total,'Five cards must cost less than five separate orders');
-// The share shrinks as the order grows, so the buyer sees the saving.
-assert.ok(Number(ids['quote-shared-share'].textContent.replaceAll(',','')) < single.share);
+// Five cards still cost less than five separate orders, which is the saving.
+assert.ok(Number(ids['quote-total-toman'].textContent.replaceAll(',','')) < 5*Number(single.toman));
 // The count is written in Persian numerals, never Latin ones.
 assert.ok(ids['quote-result-quantity'].textContent.includes('۵'),ids['quote-result-quantity'].textContent);
 assert.ok(!/[0-9]/.test(ids['quote-result-quantity'].textContent),'no Latin digits in the prose');
@@ -723,7 +724,6 @@ assert.equal(requests.length,1);
                 total = subtotal + operator
                 cost = (total * rate.numerator + rate.denominator - 1) // rate.denominator
                 return {"principal": str(principal), "network": str(network),
-                        "materials": str(materials), "envelope": str(envelope), "post": str(post),
                         "print-materials": str(materials), "post-total": str(envelope + post),
                         "operator": str(operator), "total-sats": str(total),
                         "total-toman": str(cost), "total-rial": str(cost * 10)}
@@ -810,7 +810,7 @@ for(const test of cases) {
     rejected++; continue;
   }
   assert.equal(ids['quote-result'].hidden,false,test.id);
-  for(const [key,field] of Object.entries({principal_sats:'principal',network_sats:'network',materials_sats:'materials',envelope_sats:'envelope',post_sats:'post',print_materials_sats:'print-materials',post_total_sats:'post-total',operator_sats:'operator',operator_toman:'operator-toman',total_sats:'total-sats',total_toman:'total-toman',total_rial:'total-rial'})) {
+  for(const [key,field] of Object.entries({principal_sats:'principal',network_sats:'network',print_materials_sats:'print-materials',post_total_sats:'post-total',operator_sats:'operator',operator_toman:'operator-toman',total_sats:'total-sats',total_toman:'total-toman',total_rial:'total-rial'})) {
     assert.equal(ids['quote-'+field].textContent.replaceAll(',',''),test.expected[key],test.id+':'+key);
   }
   assert.equal(ids['quote-btc'].textContent,test.expected.btc.replace(/\.?0+$/,''),test.id);
@@ -1092,7 +1092,7 @@ class Element {
   async emit(name) { await Promise.all((this.listeners[name] || []).map(handler=>handler({preventDefault(){}}))); }
 }
 const names = process.argv[3] === 'converter' ? ['satoshi-converter','btc-amount','satoshi-amount','converter-status','gross-valuation','gross-status','gross-result','gross-toman','gross-raw-price','gross-fetched-at','gross-stale'] :
-  process.argv[3] === 'market' ? ['market-panel','market-status','market-loading','market-stale','market-data','market-fetched-at','btc-price','usdt-price','sat-price','network-fee-rate','quote-speed','quote-speed-economy','quote-speed-medium','quote-speed-fast','quote-tag','quote-in-person','quote-has-wallet','quote-quantity','quote-tag-cost','quote-options-status','quote-rows','quote-form','quote-mode','quote-amount','quote-calculate','quote-status','quote-result','quote-principal','quote-btc','quote-network','quote-materials','quote-envelope','quote-post','quote-tag-cost-result','quote-print-materials','quote-post-total','quote-operator','quote-operator-toman','quote-total-sats','quote-total-toman','quote-total-rial','quote-budget','quote-remainder','quote-budget-details','quote-result-fetched-at','quote-result-warning','quote-card-sats','quote-shared-share','quote-result-quantity'] : [];
+  process.argv[3] === 'market' ? ['market-panel','market-status','market-loading','market-stale','market-data','market-fetched-at','btc-price','usdt-price','sat-price','network-fee-rate','quote-speed','quote-speed-economy','quote-speed-medium','quote-speed-fast','quote-tag','quote-in-person','quote-has-wallet','quote-quantity','quote-tag-cost','quote-options-status','quote-rows','quote-form','quote-mode','quote-amount','quote-calculate','quote-status','quote-result','quote-principal','quote-btc','quote-network','quote-print-materials','quote-post-total','quote-operator','quote-operator-toman','quote-total-sats','quote-total-toman','quote-total-rial','quote-budget','quote-remainder','quote-budget-details','quote-result-fetched-at','quote-result-warning','quote-result-quantity'] : [];
 const ids=Object.fromEntries(names.map(name=>[name,new Element()]));
 if(ids['gross-result']) ids['gross-result'].hidden=true;
 if(ids['gross-stale']) ids['gross-stale'].hidden=true;
