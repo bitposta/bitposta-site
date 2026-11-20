@@ -60,13 +60,16 @@ def quote(pricing, case):
     inputs = case["inputs"]
     include_tag = bool(inputs.get("include_tag", False))
     in_person = bool(inputs.get("in_person", False))
+    has_wallet = bool(inputs.get("has_wallet", False))
     if case["mode"] == "principal":
         return pricing.quote_for_principal(
             inputs["btc_toman"], inputs["usdt_toman"], inputs["fee_rate"],
-            inputs["principal_sats"], include_tag=include_tag, in_person=in_person)
+            inputs["principal_sats"], include_tag=include_tag, in_person=in_person,
+            has_wallet=has_wallet)
     return pricing.quote_for_budget(
         inputs["btc_toman"], inputs["usdt_toman"], inputs["fee_rate"],
-        inputs["budget_toman"], include_tag=include_tag, in_person=in_person)
+        inputs["budget_toman"], include_tag=include_tag, in_person=in_person,
+        has_wallet=has_wallet)
 
 
 def refresh(pricing, fixture):
@@ -94,7 +97,8 @@ def refresh(pricing, fixture):
                     case["inputs"]["btc_toman"], case["inputs"]["usdt_toman"],
                     case["inputs"]["fee_rate"], row["principal_sats"] + 1,
                     include_tag=bool(case["inputs"].get("include_tag", False)),
-                    in_person=bool(case["inputs"].get("in_person", False)))["total_toman"])
+                    in_person=bool(case["inputs"].get("in_person", False)),
+                    has_wallet=bool(case["inputs"].get("has_wallet", False)))["total_toman"])
         cases.append(updated)
     return {**fixture, "cases": cases}
 

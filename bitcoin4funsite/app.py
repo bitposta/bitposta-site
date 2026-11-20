@@ -485,10 +485,16 @@ def create_app(config=None):
                 rate = snapshot['fee_rate'] if speed == 'economy' else snapshot.get('fee_rates', {}).get(speed)
                 try:
                     quote_options[speed] = {
-                        variant: quote_table(**raw_rates, fee_rate=rate, include_tag=tag_on, in_person=hand)
-                        for variant, tag_on, hand in (
-                            ('no_tag', False, False), ('with_tag', True, False),
-                            ('no_tag_in_person', False, True), ('with_tag_in_person', True, True),
+                        variant: quote_table(**raw_rates, fee_rate=rate, include_tag=tag_on,
+                                             in_person=hand, has_wallet=wallet)
+                        for variant, tag_on, hand, wallet in (
+                            ('no_tag', False, False, False), ('with_tag', True, False, False),
+                            ('no_tag_in_person', False, True, False),
+                            ('with_tag_in_person', True, True, False),
+                            ('no_tag_wallet', False, False, True),
+                            ('with_tag_wallet', True, False, True),
+                            ('no_tag_in_person_wallet', False, True, True),
+                            ('with_tag_in_person_wallet', True, True, True),
                         )
                     }
                 except ValueError:

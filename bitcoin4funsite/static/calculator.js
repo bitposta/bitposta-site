@@ -39,6 +39,16 @@
   }
   /** The largest card count the pricing core accepts; keep in step with pricing._quantity. */
   const MAX_QUANTITY = 100;
+  /**
+   * Every tag / hand-delivery / wallet combination, in the order pricing.py's
+   * /api/market builds them: [key, withTag, handDelivered, hasWallet].
+   */
+  const VARIANTS = [
+    ["no_tag", false, false, false], ["with_tag", true, false, false],
+    ["no_tag_in_person", false, true, false], ["with_tag_in_person", true, true, false],
+    ["no_tag_wallet", false, false, true], ["with_tag_wallet", true, false, true],
+    ["no_tag_in_person_wallet", false, true, true], ["with_tag_in_person_wallet", true, true, true]
+  ];
   function validSnapshot(market) {
     return market && ["fresh", "stale"].includes(market.status) &&
       typeof market.fetched_at === "string" &&
@@ -166,39 +176,48 @@
   const tag = document.getElementById("quote-tag");
   const inPerson = document.getElementById("quote-in-person");
   const quantityInput = document.getElementById("quote-quantity");
-  /** The catalog key for the current tag/hand-delivery choice; hand delivery drops materials and post. */
-  const variantName = (withTag, hand) => (withTag ? "with_tag" : "no_tag") + (hand ? "_in_person" : "");
+  const hasWallet = document.getElementById("quote-has-wallet");
+  /**
+   * The catalog key for the current three-way choice. Hand delivery drops the
+   * postal envelope and postage; a buyer who already has a wallet drops the
+   * print/seal/label group AND the postal group, because no card is made or
+   * mailed. The suffixes are ordered so every one of the eight combinations has
+   * its own key, and the server builds exactly the same set.
+   */
+  const variantName = (withTag, hand, wallet) =>
+    (withTag ? "with_tag" : "no_tag") + (hand ? "_in_person" : "") + (wallet ? "_wallet" : "");
 
   let quantity = 1;
 
   function quote(principal, cards = quantity) {
     const count = BigInt(cards);
     const network = BigInt(snapshot.costs.network_sats);
-    const convert = BigInt(snapshot.costs.convert_sats ?? 0);
-    const transfer = BigInt(snapshot.costs.transfer_sats ?? 0);
     const materials = BigInt(snapshot.costs.materials_sats);
     const envelope = BigInt(snapshot.costs.envelope_sats ?? 0);
     const post = BigInt(snapshot.costs.post_sats);
     const tagCost = BigInt(snapshot.costs.tag_sats ?? 0);
-    // The 1% exchange markup already lives in the satoshi price, so the principal
-    // is charged once. Two cost groups: the CARD group (principal, delivery network
-    // fee, card materials, tag) is spent per paper card; the SHARED group (the two
-    // exchange acquisition fees, the postal envelope and the postage) is spent once
-    // per order, so five cards cost less than five separate orders.
+    // The 3.5% acquisition markup already lives in the satoshi price, so the
+    // principal is charged once and there is no separate fixed acquisition fee.
+    // Three cost groups: the buyer's own purchase cost (inside the rate), the
+    // PRINT group (materials + tag) and the POSTAL group (envelope + postage).
+    // The card block is spent per paper card; the postal block is spent once per
+    // order, so five cards cost less than five separate orders.
     const card = principal + network + materials + tagCost;
-    const shared = convert + transfer + envelope + post;
+    const shared = envelope + post;
+    const printMaterials = materials + tagCost;
     const subtotal = card * count + shared;
-    const operator = ceilDivide(subtotal * 15n, 100n);
+    const operator = ceilDivide(subtotal * 5n, 100n);
     const total = subtotal + operator;
     const rate = rational(snapshot.rates.satoshi_toman);
     const toman = ceilDivide(total * rate.numerator, rate.denominator);
-    // The operator's income in toman: the same 15% fee converted once, never 15% of total-toman.
+    // The operator's income in toman: the same 5% fee converted once, never 5% of total-toman.
     const operatorToman = ceilDivide(operator * rate.numerator, rate.denominator);
-    // The per-card share of the shared block, rounded UP so the figure never
+    // The per-card share of the postal block, rounded UP so the figure never
     // under-states what the buyer pays. Shown for comparison, never charged again.
     const sharedShare = ceilDivide(shared, count);
-    return { principal, network, convert, transfer, materials, envelope, post,
-      "tag-cost-result": tagCost, "card-sats": card, "shared-sats": shared,
+    return { principal, network, materials, envelope, post,
+      "tag-cost-result": tagCost, "print-materials": printMaterials,
+      "post-total": envelope + post, "card-sats": card,
       "shared-share": sharedShare, operator, "operator-toman": operatorToman,
       "total-sats": total, "total-toman": toman, "total-rial": toman * 10n };
   }
@@ -256,7 +275,7 @@
     document.getElementById("quote-btc").textContent = bitcoin(values.principal);
     document.getElementById("quote-result-quantity").textContent = cards === 1
       ? "این برآورد برای یک کارت است."
-      : "این برآورد برای " + persianDigits(cards) + " کارت است. چهار هزینهٔ سفارشی (کارمزد تبدیل، کارمزد انتقال، پاکت پستی و پست) فقط یک‌بار حساب شده‌اند.";
+      : "این برآورد برای " + persianDigits(cards) + " کارت است. گروه پست (پاکت و پست) فقط یک‌بار برای کل سفارش حساب شده است.";
     document.getElementById("quote-budget-details").hidden = budget === null;
     document.getElementById("quote-budget").textContent = budget === null ? "" : grouped(budget);
     document.getElementById("quote-remainder").textContent = budget === null ? "" : grouped(budget - values["total-toman"]);
@@ -272,9 +291,9 @@
 
   function clearResult() {
     result.hidden = true;
-    for (const name of ["principal", "btc", "network", "convert", "transfer", "materials", "envelope", "post", "tag-cost-result", "operator", "operator-toman", "total-sats", "total-toman",
+    for (const name of ["principal", "btc", "network", "materials", "envelope", "post", "tag-cost-result", "print-materials", "post-total", "operator", "operator-toman", "total-sats", "total-toman",
       "total-rial", "budget", "remainder", "result-warning", "result-fetched-at",
-      "card-sats", "shared-sats", "shared-share", "result-quantity"]) {
+      "card-sats", "shared-share", "result-quantity"]) {
       document.getElementById("quote-" + name).textContent = "";
     }
     document.getElementById("quote-budget-details").hidden = true;
@@ -298,7 +317,7 @@
 
   function selectQuote() {
     clearResult();
-    const selected = catalog?.[speed.value]?.[variantName(tag.checked, inPerson.checked)];
+    const selected = catalog?.[speed.value]?.[variantName(tag.checked, inPerson.checked, hasWallet.checked)];
     if (!selected) {
       snapshot = null;
       calculate.disabled = true;
@@ -320,44 +339,53 @@
   speed.addEventListener("change", selectQuote);
   tag.addEventListener("change", selectQuote);
   inPerson.addEventListener("change", selectQuote);
+  hasWallet.addEventListener("change", () => {
+    // A wallet-only order prints no card, so there is nothing to label: the tag
+    // cost is zero and the checkbox is disabled rather than left misleading.
+    if (hasWallet.checked) tag.checked = false;
+    tag.disabled = hasWallet.checked || !catalog?.economy?.with_tag;
+    selectQuote();
+  });
 
   function validMarket(market) {
     if (!validSnapshot(market) ||
         !market.rates || ![market.rates.btc_toman, market.rates.usdt_toman, market.rates.satoshi_toman].every(positiveDecimal) ||
-        market.assumptions?.exchange_fee_percent !== "1" ||
-        market.assumptions?.operator_fee_percent !== "15" ||
+        market.assumptions?.exchange_fee_percent !== "3.5" ||
+        market.assumptions?.operator_fee_percent !== "5" ||
         market.assumptions?.materials_usd !== "0.05" || market.assumptions?.envelope_usd !== "0.06" || market.assumptions?.post_usd !== "0.75" ||
-        market.assumptions?.convert_usd !== "0.02" ||
-        market.assumptions?.transfer_sats !== 423 ||
         market.assumptions?.transaction_vbytes !== 141 ||
+        typeof market.assumptions?.has_wallet !== "boolean" ||
         !positiveDecimal(market.assumptions?.network_fee_rate) ||
         !integer(market.costs?.network_sats) || !integer(market.costs?.materials_sats) ||
-        !integer(market.costs?.convert_sats) || !integer(market.costs?.transfer_sats) ||
+        !integer(market.costs?.envelope_sats) ||
         !integer(market.costs?.post_sats) ||
         !integer(market.costs?.tag_sats ?? 0) ||
+        !integer(market.costs?.print_materials_sats) || !integer(market.costs?.post_total_sats) ||
+        market.costs.print_materials_sats !== market.costs.materials_sats + (market.costs.tag_sats ?? 0) ||
+        market.costs.post_total_sats !== market.costs.envelope_sats + market.costs.post_sats ||
         !Number.isInteger(market.quantity) || market.quantity < 1 || market.quantity > MAX_QUANTITY ||
         !integer(market.card_sats) || !integer(market.shared_sats) ||
-        market.shared_sats !== (market.costs.convert_sats ?? 0) + (market.costs.transfer_sats ?? 0) +
-          (market.costs.envelope_sats ?? 0) + market.costs.post_sats ||
+        market.shared_sats !== market.costs.envelope_sats + market.costs.post_sats ||
         !Array.isArray(market.rows) || market.rows.length < 1 || market.rows.length > 31) return false;
     return market.rows.every((row, index) => {
-      if (!row || ![row.principal_sats, row.network_sats, row.convert_sats, row.transfer_sats,
-          row.materials_sats, row.envelope_sats ?? 0, row.post_sats, row.tag_sats ?? 0, row.operator_sats,
+      if (!row || ![row.principal_sats, row.network_sats,
+          row.materials_sats, row.envelope_sats, row.post_sats, row.tag_sats ?? 0, row.operator_sats,
+          row.print_materials_sats, row.post_total_sats,
           row.operator_toman, row.total_sats, row.total_toman, row.total_rial, row.remainder_toman].every(integer) ||
           row.principal_sats < 501 || row.principal_sats > 2100000000000000 || row.total_toman === 0 ||
           typeof row.btc !== "string" || !/^(?:0|[1-9][0-9]{0,7})\.[0-9]{8}$/.test(row.btc) ||
           row.network_sats !== market.costs.network_sats || row.materials_sats !== market.costs.materials_sats ||
-          row.convert_sats !== market.costs.convert_sats || row.transfer_sats !== market.costs.transfer_sats ||
-          (row.envelope_sats ?? 0) !== (market.costs.envelope_sats ?? 0) ||
+          row.envelope_sats !== market.costs.envelope_sats ||
           row.post_sats !== market.costs.post_sats ||
-          (row.tag_sats ?? 0) !== (market.costs.tag_sats ?? 0)) return false;
+          (row.tag_sats ?? 0) !== (market.costs.tag_sats ?? 0) ||
+          row.print_materials_sats !== market.costs.print_materials_sats ||
+          row.post_total_sats !== market.costs.post_total_sats) return false;
       const [whole, fraction] = row.btc.split(".");
       // quantity and the shared block are per ORDER (top level); each row repeats them.
       const cards = BigInt(market.quantity);
       const cardSats = BigInt(row.principal_sats) + BigInt(row.network_sats) +
         BigInt(row.materials_sats) + BigInt(row.tag_sats ?? 0);
-      const sharedSats = BigInt(row.convert_sats) + BigInt(row.transfer_sats) +
-        BigInt(row.envelope_sats ?? 0) + BigInt(row.post_sats);
+      const sharedSats = BigInt(row.envelope_sats) + BigInt(row.post_sats);
       if (BigInt(row.card_sats) !== cardSats || BigInt(row.shared_sats) !== sharedSats ||
           BigInt(row.shared_sats) !== BigInt(market.shared_sats) ||
           BigInt(row.shared_share_sats) !== ceilDivide(sharedSats, cards) ||
@@ -373,10 +401,11 @@
     });
   }
 
-  function validChoice(market, choice, withTag, hand) {
+  function validChoice(market, choice, withTag, hand, wallet) {
     if (!choice || choice.assumptions?.tag_usd !== "0.12" ||
         choice.assumptions?.include_tag !== withTag ||
         choice.assumptions?.in_person !== hand ||
+        choice.assumptions?.has_wallet !== wallet ||
         !integer(choice.costs?.tag_sats) ||
         !validMarket({ ...market, ...choice }) ||
         !["btc_toman", "usdt_toman", "satoshi_toman"].every(key => choice.rates[key] === market.rates[key]) ||
@@ -388,31 +417,30 @@
     const dollarCost = cents => ceilDivide(cents * usdt.numerator * sat.denominator,
       100n * usdt.denominator * sat.numerator);
     const network = ceilDivide(fee.numerator * 141n, fee.denominator);
-    // Materials (seal, paper, print) are always spent on the card. Hand delivery
-    // drops only the two postal charges: the envelope and the postage.
-    const materials = dollarCost(5n);
-    const convert = dollarCost(2n);
-    const transfer = 423n;
-    const envelope = hand ? 0n : dollarCost(6n);
-    const post = hand ? 0n : dollarCost(75n);
-    const tagCost = withTag ? dollarCost(12n) : 0n;
+    // Print, seal and the optional label are spent on the card. Hand delivery
+    // drops only the postal charges; a buyer who already has a wallet gets no
+    // card and no envelope, so both groups are zero for them.
+    const mailed = !(hand || wallet);
+    const materials = wallet ? 0n : dollarCost(5n);
+    const envelope = mailed ? dollarCost(6n) : 0n;
+    const post = mailed ? dollarCost(75n) : 0n;
+    const tagCost = withTag && !wallet ? dollarCost(12n) : 0n;
     if (BigInt(choice.costs.network_sats) !== network || BigInt(choice.costs.materials_sats) !== materials ||
-        BigInt(choice.costs.convert_sats) !== convert || BigInt(choice.costs.transfer_sats) !== transfer ||
-        BigInt(choice.costs.envelope_sats ?? 0) !== envelope ||
+        BigInt(choice.costs.envelope_sats) !== envelope ||
         BigInt(choice.costs.post_sats) !== post ||
-        BigInt(choice.costs.tag_sats) !== tagCost) return false;
+        BigInt(choice.costs.tag_sats) !== tagCost ||
+        BigInt(choice.costs.print_materials_sats) !== materials + tagCost ||
+        BigInt(choice.costs.post_total_sats) !== envelope + post) return false;
     const cost = (principal, cards) => {
-      const subtotal = (principal + network + materials + tagCost) * cards +
-        convert + transfer + envelope + post;
-      return ceilDivide(ceilDivide(subtotal * 115n, 100n) * sat.numerator, sat.denominator);
+      const subtotal = (principal + network + materials + tagCost) * cards + envelope + post;
+      return ceilDivide(ceilDivide(subtotal * 105n, 100n) * sat.numerator, sat.denominator);
     };
     return choice.rows.every(row => {
       if (!integer(row.tag_sats)) return false;
       const principal = BigInt(row.principal_sats);
       const cards = BigInt(choice.quantity);
-      const subtotal = (principal + network + materials + tagCost) * cards +
-        convert + transfer + envelope + post;
-      return BigInt(row.operator_sats) === ceilDivide(subtotal * 15n, 100n) &&
+      const subtotal = (principal + network + materials + tagCost) * cards + envelope + post;
+      return BigInt(row.operator_sats) === ceilDivide(subtotal * 5n, 100n) &&
         BigInt(row.operator_toman) === ceilDivide(BigInt(row.operator_sats) * sat.numerator, sat.denominator) &&
         BigInt(row.total_toman) === cost(principal, cards) &&
         (row.budget_toman === null || principal === maximum || cost(principal + 1n, cards) > BigInt(row.budget_toman));
@@ -440,16 +468,15 @@
     const breakdown = element("dl");
     for (const [label, value] of [
       ["اصل مبلغ هر کارت؛ ساتوشی", row.principal_sats],
-      ["مواد پاکت هر کارت (مهر، کاغذ، چاپ)؛ ساتوشی", row.materials_sats],
       ["شبکه (تحویل) هر کارت؛ ساتوشی", row.network_sats],
-      ["برچسب هر کارت؛ ساتوشی", row.tag_sats ?? 0],
+      ["مواد چاپ و مهر هر کارت؛ ساتوشی", row.materials_sats],
+      ["برچسب NFC هر کارت؛ ساتوشی", row.tag_sats ?? 0],
+      ["گروه چاپ، مهر و برچسب هر کارت؛ ساتوشی", row.print_materials_sats],
       ["جمع هر کارت؛ ساتوشی", row.card_sats],
-      ["کارمزد تبدیل، یک‌بار در سفارش؛ ساتوشی", row.convert_sats],
-      ["کارمزد انتقال بیت‌کوین (۴۲۳)، یک‌بار در سفارش؛ ساتوشی", row.transfer_sats],
-      ["پاکت پستی، یک‌بار در سفارش؛ ساتوشی", row.envelope_sats ?? 0],
+      ["پاکت پستی، یک‌بار در سفارش؛ ساتوشی", row.envelope_sats],
       ["پست، یک‌بار در سفارش؛ ساتوشی", row.post_sats],
-      ["جمع چهار قلم سفارشی؛ ساتوشی", row.shared_sats],
-      ["سهم هر کارت از آن چهار قلم؛ ساتوشی", row.shared_share_sats],
+      ["گروه پست، یک‌بار در سفارش؛ ساتوشی", row.post_total_sats],
+      ["سهم هر کارت از گروه پست؛ ساتوشی", row.shared_share_sats],
       ["گرداننده؛ ساتوشی", row.operator_sats],
       ["درآمد گرداننده؛ تومان", row.operator_toman],
       ["جمع؛ ساتوشی", row.total_sats], ["معادل ریال", row.total_rial],
@@ -482,9 +509,10 @@
       catalog = {};
       for (const name of ["economy", "medium", "fast"]) {
         const choices = market.quote_options?.[name];
-        if (choices && [["no_tag", false, false], ["with_tag", true, false],
-                        ["no_tag_in_person", false, true], ["with_tag_in_person", true, true]]
-          .every(([variant, withTag, hand]) => validChoice(market, choices[variant], withTag, hand))) catalog[name] = choices;
+        // All eight combinations must be present and self-consistent; the page
+        // never invents a variant the server did not price.
+        if (choices && VARIANTS.every(([variant, withTag, hand, wallet]) =>
+          validChoice(market, choices[variant], withTag, hand, wallet))) catalog[name] = choices;
         document.getElementById("quote-speed-" + name).disabled = !catalog[name];
       }
       // Older snapshots remain usable, but cannot invent tag or priority costs.
@@ -494,9 +522,11 @@
       speed.value = "economy";
       tag.checked = false;
       inPerson.checked = false;
+      hasWallet.checked = false;
       speed.disabled = false;
       tag.disabled = !catalog.economy.with_tag;
       inPerson.disabled = !catalog.economy.no_tag_in_person;
+      hasWallet.disabled = !catalog.economy.no_tag_wallet;
       if (quantityInput) quantityInput.disabled = false;
       document.getElementById("quote-options-status").textContent =
         ["medium", "fast"].some(name => !catalog[name])

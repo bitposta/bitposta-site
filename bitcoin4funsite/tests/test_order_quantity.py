@@ -1,11 +1,11 @@
 """Order quantity: shared costs are paid once per order, card costs per card.
 
 The owner's requirement: a buyer who orders five cards of different amounts pays
-the exchange conversion fee, the 423-satoshi transfer, the postal envelope and the
-postage ONE time, not five times. Card-bound costs (the envelope materials, the
-delivery network fee, the optional tag and the principal) still scale with the
-number of cards. Each table row must also expose the per-card share of the shared
-cost so two orders of different quantities are comparable.
+the postal envelope and the postage ONE time, not five times. Card-bound costs
+(the print/seal materials, the delivery network fee, the optional tag and the
+principal) still scale with the number of cards. Each table row must also expose
+the per-card share of the shared cost so two orders of different quantities are
+comparable.
 """
 import importlib.util
 import json
@@ -39,8 +39,8 @@ class OrderQuantityTest(unittest.TestCase):
         self.assertEqual(quote['quantity'], 1)
         self.assertEqual(quote['card_sats'], 100000 + quote['network_sats']
                          + quote['materials_sats'] + quote['tag_sats'])
-        self.assertEqual(quote['shared_sats'], quote['convert_sats']
-                         + quote['transfer_sats'] + quote['envelope_sats'] + quote['post_sats'])
+        self.assertEqual(quote['shared_sats'], quote['envelope_sats'] + quote['post_sats'])
+        self.assertEqual(quote['shared_sats'], quote['post_total_sats'])
         # quantity 1 must not change any published total.
         self.assertEqual(quote['total_sats'], quote['card_sats'] + quote['shared_sats']
                          + quote['operator_sats'])
@@ -48,8 +48,8 @@ class OrderQuantityTest(unittest.TestCase):
     def test_shared_costs_are_charged_once_for_a_multi_card_order(self):
         one = pricing.quote_for_principal(*RATES, 100000, quantity=1)
         five = pricing.quote_for_principal(*RATES, 100000, quantity=5)
-        # The four shared components are identical, not multiplied.
-        for key in ('convert_sats', 'transfer_sats', 'envelope_sats', 'post_sats'):
+        # The shared components are identical, not multiplied.
+        for key in ('envelope_sats', 'post_sats', 'post_total_sats'):
             self.assertEqual(five[key], one[key], key)
         self.assertEqual(five['shared_sats'], one['shared_sats'])
         # Card-bound costs scale linearly.
@@ -87,7 +87,7 @@ class OrderQuantityTest(unittest.TestCase):
         ceiling = lambda x: -(-x.numerator // x.denominator)
         five = pricing.quote_for_principal(*RATES, 100000, quantity=5)
         subtotal = 5 * five['card_sats'] + five['shared_sats']
-        self.assertEqual(five['operator_sats'], ceiling(Fraction(3, 20) * subtotal))
+        self.assertEqual(five['operator_sats'], ceiling(Fraction(1, 20) * subtotal))
         self.assertEqual(five['total_sats'], subtotal + five['operator_sats'])
 
     def test_quote_table_and_budget_accept_quantity(self):
@@ -104,6 +104,16 @@ class OrderQuantityTest(unittest.TestCase):
             with self.subTest(quantity=bad):
                 with self.assertRaises(ValueError):
                     pricing.quote_for_principal(*RATES, 100000, quantity=bad)
+
+    def test_wallet_only_order_drops_both_groups_for_every_card(self):
+        five = pricing.quote_for_principal(*RATES, 100000, quantity=5, has_wallet=True)
+        # No card is printed or mailed, so neither group survives, and the order
+        # block stays empty no matter how many cards are bought.
+        self.assertEqual(five['shared_sats'], 0)
+        self.assertEqual(five['post_total_sats'], 0)
+        self.assertEqual(five['print_materials_sats'], 0)
+        self.assertEqual(five['card_sats'], 100000 + five['network_sats'])
+        self.assertEqual(five['total_sats'], 5 * five['card_sats'] + five['operator_sats'])
 
     def test_quantity_does_not_leak_sensitive_keys(self):
         row = pricing.quote_for_principal(*RATES, 100000, quantity=2)

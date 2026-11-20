@@ -308,7 +308,7 @@ class ApplicationContract(unittest.TestCase):
         client = self.module.create_app({'TESTING': True}).test_client()
         self.assertEqual(client.get('/t').data, client.get('/terms').data)
 
-    def test_market_exposes_six_exact_options_without_changing_default_quote(self):
+    def test_market_exposes_eight_exact_options_without_changing_default_quote(self):
         from pricing import quote_table
         service = Mock()
         service.snapshot.return_value = {
@@ -322,10 +322,24 @@ class ApplicationContract(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json
         self.assertIn('quote_options', data)
+        # All eight tag / hand-delivery / wallet combinations, because the browser
+        # validates every one of them and rejects a payload that carries fewer.
+        combinations = (
+            ('no_tag', False, False, False), ('with_tag', True, False, False),
+            ('no_tag_in_person', False, True, False), ('with_tag_in_person', True, True, False),
+            ('no_tag_wallet', False, False, True), ('with_tag_wallet', True, False, True),
+            ('no_tag_in_person_wallet', False, True, True),
+            ('with_tag_in_person_wallet', True, True, True),
+        )
         for speed, rate in service.snapshot.return_value['fee_rates'].items():
-            for variant, enabled in (('no_tag', False), ('with_tag', True)):
+            self.assertEqual(set(data['quote_options'][speed]), {name for name, *_ in combinations})
+            for variant, tag_on, hand, wallet in combinations:
                 self.assertEqual(data['quote_options'][speed][variant],
-                                 quote_table('21000000000', '270000', rate, include_tag=enabled))
+                                 quote_table('21000000000', '270000', rate, include_tag=tag_on,
+                                             in_person=hand, has_wallet=wallet))
+        # A wallet-only order pays for no card and no postage.
+        wallet = data['quote_options']['economy']['no_tag_wallet']
+        self.assertEqual((wallet['costs']['print_materials_sats'], wallet['costs']['post_total_sats']), (0, 0))
         # The top-level quote is exactly the economy/no_tag option. quote_table also
         # publishes the per-order quantity and the shared-cost block, so those keys
         # belong in this comparison too.
@@ -352,7 +366,7 @@ class ApplicationContract(unittest.TestCase):
         response = app.test_client().get('/api/market')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['status'], 'stale')
-        self.assertEqual(response.json['rates']['btc_toman'], '21210000000')
+        self.assertEqual(response.json['rates']['btc_toman'], '21735000000')
         self.assertIn('raw_rates', response.json)
         self.assertEqual(response.json['raw_rates'], {'btc_toman': '21000000000', 'usdt_toman': '270000'})
         self.assertEqual(response.json['rows'][0]['principal_sats'], 501)
